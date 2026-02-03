@@ -1,0 +1,130 @@
+"""Console user interface for the trainer."""
+
+from pathlib import Path
+
+from .rules import Rules
+from .strategy import Action
+from .trainer import Trainer
+
+
+def clear_screen() -> None:
+    """Clear the terminal screen."""
+    print("\033[2J\033[H", end="")
+
+
+def get_rules() -> Rules:
+    """Prompt user to configure game rules."""
+    print("\n=== Game Configuration ===\n")
+
+    # Number of decks
+    while True:
+        deck_input = input("Number of decks (1/6) [6]: ").strip()
+        if deck_input == "":
+            num_decks = 6
+            break
+        if deck_input in ("1", "6"):
+            num_decks = int(deck_input)
+            break
+        print("Please enter 1 or 6")
+
+    # Dealer hits soft 17
+    while True:
+        h17_input = input("Dealer hits soft 17? (y/n) [y]: ").strip().lower()
+        if h17_input == "":
+            dealer_hits_soft_17 = True
+            break
+        if h17_input in ("y", "yes"):
+            dealer_hits_soft_17 = True
+            break
+        if h17_input in ("n", "no"):
+            dealer_hits_soft_17 = False
+            break
+        print("Please enter y or n")
+
+    return Rules(num_decks=num_decks, dealer_hits_soft_17=dealer_hits_soft_17)
+
+
+def display_hand(player_hand, dealer_card) -> None:
+    """Display the current hand situation."""
+    print(f"\nYour hand: {player_hand}  Dealer shows: {dealer_card}")
+
+
+def get_action() -> str | None:
+    """Prompt user for their action.
+
+    Returns:
+        The action string, or None to quit
+    """
+    print("\nActions: (S)tand  (H)it  (D)ouble  s(P)lit  su(R)render  (Q)uit")
+    while True:
+        action = input("Your action: ").strip().upper()
+        if action == "Q":
+            return None
+        if action in Action.ALL:
+            return action
+        print("Invalid action. Use S, H, D, P, R, or Q to quit.")
+
+
+def display_result(result, stats) -> None:
+    """Display the result and current stats."""
+    print(f"\n{result.feedback}")
+    print(f"Session: {stats}")
+
+
+def display_welcome() -> None:
+    """Display welcome message."""
+    clear_screen()
+    print("=" * 50)
+    print("     BLACKJACK BASIC STRATEGY TRAINER")
+    print("=" * 50)
+    print("\nLearn perfect basic strategy through practice!")
+    print("You'll be shown a hand and must choose the correct action.")
+
+
+def display_final_stats(stats) -> None:
+    """Display final session statistics."""
+    print("\n" + "=" * 50)
+    print("          SESSION COMPLETE")
+    print("=" * 50)
+    print(f"\nFinal Score: {stats}")
+    if stats.total > 0:
+        if stats.percentage >= 90:
+            print("Excellent! You've mastered basic strategy!")
+        elif stats.percentage >= 70:
+            print("Good job! Keep practicing to improve.")
+        else:
+            print("Keep studying the strategy charts.")
+    print("\nThanks for practicing!")
+
+
+def run_training_loop(trainer: Trainer) -> None:
+    """Run the main training loop."""
+    print(f"\nRules: {trainer.rules}")
+    print("\nStarting training session... (Q to quit)\n")
+
+    while True:
+        # Deal a new hand
+        player_hand, dealer_card = trainer.deal_hand()
+        display_hand(player_hand, dealer_card)
+
+        # Get player's action
+        action = get_action()
+        if action is None:
+            break
+
+        # Check and display result
+        result = trainer.check_answer(action)
+        display_result(result, trainer.stats)
+
+    display_final_stats(trainer.stats)
+
+
+def main(data_dir: Path | None = None) -> None:
+    """Main entry point for the UI."""
+    if data_dir is None:
+        data_dir = Path(__file__).parent.parent / "data"
+
+    display_welcome()
+    rules = get_rules()
+    trainer = Trainer(rules, data_dir)
+    run_training_loop(trainer)
