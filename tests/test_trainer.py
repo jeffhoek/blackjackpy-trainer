@@ -135,9 +135,9 @@ class TestTrainer:
 class TestRules:
     def test_default_rules(self):
         rules = Rules()
-        assert rules.num_decks == 6
+        assert rules.num_decks == 1
         assert rules.dealer_hits_soft_17
-        assert rules.strategy_file == "multi-deck.csv"
+        assert rules.strategy_file == "single-deck.csv"
 
     def test_single_deck_rules(self):
         rules = Rules(num_decks=1)

@@ -1,10 +1,32 @@
 """Console user interface for the trainer."""
 
+import sys
 from pathlib import Path
 
 from .rules import Rules
 from .strategy import Action
 from .trainer import Trainer
+
+
+def getch() -> str:
+    """Read a single character from stdin without requiring Enter."""
+    try:
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
+    except ImportError:
+        # Windows fallback
+        import msvcrt
+
+        return msvcrt.getch().decode("utf-8", errors="ignore")
 
 
 def clear_screen() -> None:
@@ -18,9 +40,9 @@ def get_rules() -> Rules:
 
     # Number of decks
     while True:
-        deck_input = input("Number of decks (1/6) [6]: ").strip()
+        deck_input = input("Number of decks (1/6) [1]: ").strip()
         if deck_input == "":
-            num_decks = 6
+            num_decks = 1
             break
         if deck_input in ("1", "6"):
             num_decks = int(deck_input)
@@ -55,14 +77,17 @@ def get_action() -> str | None:
     Returns:
         The action string, or None to quit
     """
-    print("\nActions: (S)tand  (H)it  (D)ouble  s(P)lit  su(R)render  (Q)uit")
+    print("\n[S]tand  [H]it  [D]ouble  s[P]lit  su[R]render  [Q]uit")
+    print("Your action: ", end="", flush=True)
     while True:
-        action = input("Your action: ").strip().upper()
+        action = getch().upper()
         if action == "Q":
+            print(action)
             return None
         if action in Action.ALL:
+            print(action)
             return action
-        print("Invalid action. Use S, H, D, P, R, or Q to quit.")
+        # Ignore invalid keys silently
 
 
 def display_result(result, stats) -> None:
