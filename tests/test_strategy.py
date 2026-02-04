@@ -89,8 +89,8 @@ class TestStrategySingleDeck:
         action = single_deck_strategy.get_correct_action("9", "2")
         assert action == "D"  # Single deck: Double
 
-    def test_soft_A8_vs_5_double(self, single_deck_strategy):
-        action = single_deck_strategy.get_correct_action("A8", "5")
+    def test_soft_A8_vs_6_double(self, single_deck_strategy):
+        action = single_deck_strategy.get_correct_action("A8", "6")
         assert action == "D"
 
 
