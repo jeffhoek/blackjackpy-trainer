@@ -16,8 +16,8 @@
 6,H,H,H,H,H,H,H,H,H,H
 5,H,H,H,H,H,H,H,H,H,H
 A9,S,S,S,S,S,S,S,S,S,S
-A8,S,S,S,S,D,S,S,S,S,S
-A7,D,D,D,D,D,S,S,H,H,H
+A8,S,S,S,S,S,S,S,S,S,S
+A7,S,D,D,D,D,S,S,H,H,H
 A6,H,D,D,D,D,H,H,H,H,H
 A5,H,H,D,D,D,H,H,H,H,H
 A4,H,H,D,D,D,H,H,H,H,H
@@ -30,6 +30,6 @@ TT,S,S,S,S,S,S,S,S,S,S
 77,P,P,P,P,P,P,H,H,H,H
 66,P,P,P,P,P,H,H,H,H,H
 55,D,D,D,D,D,D,D,D,H,H
-44,H,H,H,P,P,H,H,H,H,H
+44,H,H,H,H,P,P,H,H,H,H
 33,P,P,P,P,P,P,H,H,H,H
 22,P,P,P,P,P,P,H,H,H,H
