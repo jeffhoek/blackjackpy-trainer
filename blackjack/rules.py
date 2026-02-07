@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from .levels import LEVEL_NAMES
+
 
 @dataclass
 class Rules:
@@ -9,6 +11,7 @@ class Rules:
 
     num_decks: int = 1
     dealer_hits_soft_17: bool = True  # H17 vs S17 (for future use)
+    level: int = 0
 
     @property
     def strategy_file(self) -> str:
@@ -20,4 +23,5 @@ class Rules:
     def __str__(self) -> str:
         deck_str = "1 deck" if self.num_decks == 1 else f"{self.num_decks} decks"
         h17_str = "H17" if self.dealer_hits_soft_17 else "S17"
-        return f"{deck_str}, {h17_str}"
+        level_str = LEVEL_NAMES.get(self.level, f"Level {self.level}")
+        return f"{deck_str}, {h17_str}, {level_str}"
