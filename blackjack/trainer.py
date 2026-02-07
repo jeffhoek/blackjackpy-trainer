@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .cards import Card, Shoe
 from .hand import Hand
+from .levels import get_keys_for_level
 from .rules import Rules
 from .strategy import Action, Strategy
 
@@ -61,6 +62,9 @@ class Trainer:
         self.stats = TrainingStats()
         self._current_hand: Hand | None = None
         self._current_dealer_card: Card | None = None
+        self._allowed_keys: set[str] | None = None
+        if rules.level > 0:
+            self._allowed_keys = get_keys_for_level(rules.level)
 
     def deal_hand(self) -> tuple[Hand, Card]:
         """Deal a new hand for training.
@@ -68,7 +72,7 @@ class Trainer:
         Returns:
             Tuple of (player_hand, dealer_up_card)
         """
-        while True:
+        for _ in range(1000):
             if self.shoe.needs_shuffle():
                 self.shoe.shuffle()
 
@@ -80,9 +84,16 @@ class Trainer:
             # Deal dealer up card
             dealer_card = self.shoe.deal()
 
-            # Re-deal if player has blackjack (no strategy decision needed)
-            if not hand.is_blackjack:
-                break
+            # Skip blackjacks (no strategy decision needed)
+            if hand.is_blackjack:
+                continue
+
+            # Skip hands not in the allowed set for the current level
+            if self._allowed_keys is not None:
+                if hand.get_strategy_key() not in self._allowed_keys:
+                    continue
+
+            break
 
         self._current_hand = hand
         self._current_dealer_card = dealer_card

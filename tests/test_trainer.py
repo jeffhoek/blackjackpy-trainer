@@ -132,12 +132,51 @@ class TestTrainer:
         assert len(hand) == 2
 
 
+class TestTrainerLevelFiltering:
+    def test_level_0_allows_all_hands(self, data_dir):
+        """Level 0 should not filter any hands (except blackjacks)."""
+        rules = Rules(num_decks=6, level=0)
+        trainer = Trainer(rules, data_dir)
+        # Just verify it deals without error and doesn't filter
+        keys_seen: set[str] = set()
+        for _ in range(500):
+            hand, _ = trainer.deal_hand()
+            keys_seen.add(hand.get_strategy_key())
+        # With 500 hands, we should see many different keys
+        assert len(keys_seen) > 10
+
+    def test_level_1_only_fundamentals(self, data_dir):
+        """Level 1 should only produce hands in the Fundamentals set."""
+        from blackjack.levels import get_keys_for_level
+
+        allowed = get_keys_for_level(1)
+        rules = Rules(num_decks=6, level=1)
+        trainer = Trainer(rules, data_dir)
+        for _ in range(100):
+            hand, _ = trainer.deal_hand()
+            key = hand.get_strategy_key()
+            assert key in allowed, f"Level 1 dealt disallowed hand: {key}"
+
+    def test_level_4_only_expert(self, data_dir):
+        """Level 4 should only produce hands in the Expert set."""
+        from blackjack.levels import get_keys_for_level
+
+        allowed = get_keys_for_level(4)
+        rules = Rules(num_decks=6, level=4)
+        trainer = Trainer(rules, data_dir)
+        for _ in range(50):
+            hand, _ = trainer.deal_hand()
+            key = hand.get_strategy_key()
+            assert key in allowed, f"Level 4 dealt disallowed hand: {key}"
+
+
 class TestRules:
     def test_default_rules(self):
         rules = Rules()
         assert rules.num_decks == 1
         assert rules.dealer_hits_soft_17
         assert rules.strategy_file == "single-deck.csv"
+        assert rules.level == 0
 
     def test_single_deck_rules(self):
         rules = Rules(num_decks=1)
@@ -145,7 +184,14 @@ class TestRules:
 
     def test_rules_str(self):
         rules = Rules(num_decks=6, dealer_hits_soft_17=True)
-        assert str(rules) == "6 decks, H17"
+        assert str(rules) == "6 decks, H17, All Hands"
 
         rules = Rules(num_decks=1, dealer_hits_soft_17=False)
-        assert str(rules) == "1 deck, S17"
+        assert str(rules) == "1 deck, S17, All Hands"
+
+    def test_rules_str_with_level(self):
+        rules = Rules(num_decks=6, level=1)
+        assert str(rules) == "6 decks, H17, Fundamentals"
+
+        rules = Rules(num_decks=6, level=4)
+        assert str(rules) == "6 decks, H17, Expert"

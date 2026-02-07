@@ -3,6 +3,7 @@
 import sys
 from pathlib import Path
 
+from .levels import LEVEL_NAMES
 from .rules import Rules
 from .strategy import Action
 from .trainer import Trainer
@@ -63,7 +64,21 @@ def get_rules() -> Rules:
             break
         print("Please enter y or n")
 
-    return Rules(num_decks=num_decks, dealer_hits_soft_17=dealer_hits_soft_17)
+    # Skill level
+    print("\nSkill levels:")
+    for lvl, name in sorted(LEVEL_NAMES.items()):
+        print(f"  {lvl} - {name}")
+    while True:
+        level_input = input("Skill level (0-4) [0]: ").strip()
+        if level_input == "":
+            level = 0
+            break
+        if level_input in ("0", "1", "2", "3", "4"):
+            level = int(level_input)
+            break
+        print("Please enter 0-4")
+
+    return Rules(num_decks=num_decks, dealer_hits_soft_17=dealer_hits_soft_17, level=level)
 
 
 def display_hand(player_hand, dealer_card) -> None:
