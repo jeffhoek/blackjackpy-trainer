@@ -136,7 +136,7 @@ class Trainer:
             dealer_key = "10"
 
         is_correct, correct_action = self.strategy.check_action(
-            action, row_key, dealer_key
+            action, row_key, dealer_key, hand=self._current_hand, rules=self.rules
         )
 
         self.stats.record(is_correct)

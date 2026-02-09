@@ -1,0 +1,16 @@
+[
+  {
+    "description": "Hit (6,2) hard 8 vs 5-6 instead of doubling",
+    "row_key": "8",
+    "dealer": ["5", "6"],
+    "action": "H",
+    "when": { "composition": [2, 6] }
+  },
+  {
+    "description": "Hit soft 18 vs Ace when dealer hits soft 17",
+    "row_key": "A7",
+    "dealer": ["A"],
+    "action": "H",
+    "when": { "dealer_hits_soft_17": true }
+  }
+]
