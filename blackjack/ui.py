@@ -107,7 +107,11 @@ def get_action() -> str | None:
 
 def display_result(result, stats) -> None:
     """Display the result and current stats."""
-    print(f"\n{result.feedback}")
+    if result.is_correct:
+        feedback = f"\033[32m{result.feedback}\033[0m"  # green
+    else:
+        feedback = f"\033[31m{result.feedback}\033[0m"  # red
+    print(f"\n{feedback}")
     print(f"Session: {stats}")
 
 
