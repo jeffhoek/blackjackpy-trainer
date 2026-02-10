@@ -88,3 +88,14 @@ class Strategy:
         correct = self.get_correct_action(row_key, dealer_card)
         is_correct = player_action.upper() == correct
         return is_correct, correct
+
+    def print_table(self, title: str) -> None:
+        """Print the strategy table as a formatted ASCII table."""
+        dealer_cols = self.DEALER_CARDS
+        print(f"\n{title}\n")
+        print("      " + "".join(f"{c:>5}" for c in dealer_cols))
+        for key in self._table:
+            actions = "".join(
+                f"{self._table[key].get(dc, '?'):>5}" for dc in dealer_cols
+            )
+            print(f"  {key:>4}{actions}")
