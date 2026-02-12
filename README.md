@@ -17,6 +17,21 @@ pip install -e .
 python main.py
 ```
 
+## CLI Options
+
+```bash
+# Print a strategy table and exit
+uv run python main.py --table multi-deck
+
+# Filter the table to a specific skill level (0-5)
+uv run python main.py --table multi-deck --level 3
+```
+
+| Flag | Description |
+|------|-------------|
+| `--table NAME` | Print a strategy table and exit (e.g. `single-deck`, `multi-deck`) |
+| `--level N` | With `--table`, filter to rows for skill level N (0=All, 1=Fundamentals, 2=Standard Decisions, 3=Splits, 4=Doubles & Soft Hands, 5=Expert) |
+
 ## How to Play
 
 1. **Configure rules** - Choose number of decks (1 or 6) and dealer soft 17 rule
