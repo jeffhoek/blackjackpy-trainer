@@ -193,5 +193,5 @@ class TestRules:
         rules = Rules(num_decks=6, level=1)
         assert str(rules) == "6 decks, H17, Fundamentals"
 
-        rules = Rules(num_decks=6, level=4)
+        rules = Rules(num_decks=6, level=5)
         assert str(rules) == "6 decks, H17, Expert"

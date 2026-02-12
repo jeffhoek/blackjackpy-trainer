@@ -4,8 +4,9 @@ LEVEL_NAMES: dict[int, str] = {
     0: "All Hands",
     1: "Fundamentals",
     2: "Standard Decisions",
-    3: "Doubles & Complex Splits",
-    4: "Expert",
+    3: "Splits",
+    4: "Doubles & Soft Hands",
+    5: "Expert",
 }
 
 LEVEL_KEYS: dict[int, list[str]] = {
@@ -16,30 +17,30 @@ LEVEL_KEYS: dict[int, list[str]] = {
         "17", "18", "19", "20",
         # Hard 10-11 (double)
         "10", "11",
-        # Pairs AA/88 (always split)
-        "AA", "88",
+        # Pairs AA/88 (always split), TT (never split)
+        "AA", "88", "TT",
     ],
     2: [
         # Hard 13-16 (hit/stand threshold)
         "13", "14", "15", "16",
         # Soft A8/A9 (always stand)
         "A8", "A9",
-        # Pairs TT/55/22/33/77
-        "TT", "55", "22", "33", "77",
+        # Pair 55 (never split)
+        "55",
     ],
     3: [
+        # All pairs except AA/88/TT/55
+        "22", "33", "44", "66", "77", "99",
+    ],
+    4: [
         # Hard 9/12
         "9", "12",
         # Soft A2-A5
         "A2", "A3", "A4", "A5",
-        # Pairs 44/66
-        "44", "66",
     ],
-    4: [
+    5: [
         # Soft A6/A7 (hardest!)
         "A6", "A7",
-        # Pair 99
-        "99",
     ],
 }
 
@@ -63,5 +64,5 @@ def get_keys_for_level(level: int) -> set[str]:
             all_keys.update(keys)
         return all_keys
     if level not in LEVEL_KEYS:
-        raise ValueError(f"Invalid level: {level}. Must be 0-4.")
+        raise ValueError(f"Invalid level: {level}. Must be 0-5.")
     return set(LEVEL_KEYS[level])
