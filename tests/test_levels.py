@@ -25,11 +25,12 @@ class TestLevelKeys:
             combined.update(keys)
         assert combined == ALL_STRATEGY_KEYS
 
-    def test_no_duplicates_across_levels(self):
-        """No key appears in more than one level."""
+    def test_no_unexpected_duplicates_across_levels(self):
+        """Only intentional keys appear in more than one level."""
+        allowed_duplicates = {"77"}  # appears in both Splits and Expert
         seen: set[str] = set()
         for level, keys in LEVEL_KEYS.items():
-            overlap = seen & set(keys)
+            overlap = seen & set(keys) - allowed_duplicates
             assert not overlap, f"Level {level} has duplicates: {overlap}"
             seen.update(keys)
 
@@ -46,7 +47,7 @@ class TestLevelKeys:
         assert len(LEVEL_KEYS[4]) == 6
 
     def test_level_5_count(self):
-        assert len(LEVEL_KEYS[5]) == 2
+        assert len(LEVEL_KEYS[5]) == 3
 
 
 class TestGetKeysForLevel:
@@ -61,14 +62,10 @@ class TestGetKeysForLevel:
     def test_level_3_returns_splits_without_aa_88_tt_55(self):
         keys = get_keys_for_level(3)
         assert keys == {"22", "33", "44", "66", "77", "99"}
-        assert "AA" not in keys
-        assert "88" not in keys
-        assert "TT" not in keys
-        assert "55" not in keys
 
     def test_level_5_returns_correct_keys(self):
         keys = get_keys_for_level(5)
-        assert keys == {"A6", "A7"}
+        assert keys == {"A6", "A7", "77"}
 
     def test_invalid_level_raises(self):
         with pytest.raises(ValueError, match="Invalid level: 6"):

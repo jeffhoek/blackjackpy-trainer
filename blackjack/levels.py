@@ -41,6 +41,8 @@ LEVEL_KEYS: dict[int, list[str]] = {
     5: [
         # Soft A6/A7 (hardest!)
         "A6", "A7",
+        # Pair 77 (3 distinct actions in single-deck)
+        "77",
     ],
 }
 
