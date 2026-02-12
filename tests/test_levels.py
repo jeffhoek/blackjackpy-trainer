@@ -27,7 +27,7 @@ class TestLevelKeys:
 
     def test_no_unexpected_duplicates_across_levels(self):
         """Only intentional keys appear in more than one level."""
-        allowed_duplicates = {"77"}  # appears in both Splits and Expert
+        allowed_duplicates = {"77", "99"}  # appear in both Splits and Expert
         seen: set[str] = set()
         for level, keys in LEVEL_KEYS.items():
             overlap = seen & set(keys) - allowed_duplicates
@@ -47,7 +47,7 @@ class TestLevelKeys:
         assert len(LEVEL_KEYS[4]) == 6
 
     def test_level_5_count(self):
-        assert len(LEVEL_KEYS[5]) == 3
+        assert len(LEVEL_KEYS[5]) == 4
 
 
 class TestGetKeysForLevel:
@@ -65,7 +65,7 @@ class TestGetKeysForLevel:
 
     def test_level_5_returns_correct_keys(self):
         keys = get_keys_for_level(5)
-        assert keys == {"A6", "A7", "77"}
+        assert keys == {"A6", "A7", "77", "99"}
 
     def test_invalid_level_raises(self):
         with pytest.raises(ValueError, match="Invalid level: 6"):

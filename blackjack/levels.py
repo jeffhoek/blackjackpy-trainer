@@ -43,6 +43,8 @@ LEVEL_KEYS: dict[int, list[str]] = {
         "A6", "A7",
         # Pair 77 (3 distinct actions in single-deck)
         "77",
+        # Pair 99 (split/stand depending on dealer card)
+        "99",
     ],
 }
 
