@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from blackjack.levels import LEVEL_NAMES, get_keys_for_level
 from blackjack.strategy import Strategy
 from blackjack.ui import main
 
@@ -16,18 +17,41 @@ def parse_args() -> argparse.Namespace:
         metavar="NAME",
         help="Print a strategy table and exit (e.g. single-deck, multi-deck)",
     )
+    parser.add_argument(
+        "--level",
+        type=int,
+        metavar="N",
+        help="With --table, filter to rows for skill level N (0-5)",
+    )
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def print_table(args: argparse.Namespace) -> None:
+    csv_path = Path("data") / f"{args.table}.csv"
+    if not csv_path.exists():
+        print(f"Error: {csv_path} not found", file=sys.stderr)
+        sys.exit(1)
+    title = args.table.replace("-", " ").title() + " Basic Strategy"
+    row_keys = None
+    if args.level is not None:
+        try:
+            row_keys = get_keys_for_level(args.level)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        level_name = LEVEL_NAMES.get(args.level, f"Level {args.level}")
+        title += f" \u2014 Level {args.level}: {level_name}"
+    strategy = Strategy(csv_path)
+    strategy.print_table(title, row_keys=row_keys)
+
+
+def cli() -> None:
     args = parse_args()
     if args.table:
-        csv_path = Path("data") / f"{args.table}.csv"
-        if not csv_path.exists():
-            print(f"Error: {csv_path} not found", file=sys.stderr)
-            sys.exit(1)
-        title = args.table.replace("-", " ").title() + " Basic Strategy"
-        strategy = Strategy(csv_path)
-        strategy.print_table(title)
+        print_table(args)
         sys.exit(0)
     main()
+
+
+if __name__ == "__main__":
+    cli()
