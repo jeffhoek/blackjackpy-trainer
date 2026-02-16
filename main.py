@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from blackjack.levels import LEVEL_NAMES, get_keys_for_level
+from blackjack.metrics import create_metrics_client
 from blackjack.strategy import Strategy
 from blackjack.ui import main
 
@@ -22,6 +23,18 @@ def parse_args() -> argparse.Namespace:
         type=int,
         metavar="N",
         help="With --table, filter to rows for skill level N (0-5)",
+    )
+    parser.add_argument(
+        "--statsd-host",
+        metavar="HOST",
+        help="Enable StatsD metrics and send to HOST",
+    )
+    parser.add_argument(
+        "--statsd-port",
+        type=int,
+        default=8125,
+        metavar="PORT",
+        help="StatsD port (default: 8125)",
     )
     return parser.parse_args()
 
@@ -50,7 +63,8 @@ def cli() -> None:
     if args.table:
         print_table(args)
         sys.exit(0)
-    main()
+    metrics = create_metrics_client(args.statsd_host, args.statsd_port)
+    main(metrics=metrics)
 
 
 if __name__ == "__main__":
