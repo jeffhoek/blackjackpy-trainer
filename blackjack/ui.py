@@ -160,15 +160,16 @@ def run_training_loop(trainer: Trainer) -> None:
         result = trainer.check_answer(action)
         display_result(result, trainer.stats)
 
+    trainer.metrics.end_session(trainer.stats.total)
     display_final_stats(trainer.stats)
 
 
-def main(data_dir: Path | None = None) -> None:
+def main(data_dir: Path | None = None, metrics=None) -> None:
     """Main entry point for the UI."""
     if data_dir is None:
         data_dir = Path(__file__).parent.parent / "data"
 
     display_welcome()
     rules = get_rules()
-    trainer = Trainer(rules, data_dir)
+    trainer = Trainer(rules, data_dir, metrics=metrics)
     run_training_loop(trainer)

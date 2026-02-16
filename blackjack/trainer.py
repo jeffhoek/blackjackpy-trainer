@@ -6,6 +6,7 @@ from pathlib import Path
 from .cards import Card, Shoe
 from .hand import Hand
 from .levels import get_keys_for_level
+from .metrics import NoOpMetricsClient, create_metrics_client
 from .rules import Rules
 from .strategy import Action, Strategy
 
@@ -34,12 +35,19 @@ class TrainingStats:
     def __init__(self) -> None:
         self.correct = 0
         self.total = 0
+        self.current_streak = 0
+        self.best_streak = 0
 
     def record(self, is_correct: bool) -> None:
         """Record a result."""
         self.total += 1
         if is_correct:
             self.correct += 1
+            self.current_streak += 1
+            if self.current_streak > self.best_streak:
+                self.best_streak = self.current_streak
+        else:
+            self.current_streak = 0
 
     @property
     def percentage(self) -> float:
@@ -55,11 +63,12 @@ class TrainingStats:
 class Trainer:
     """Orchestrates a training session."""
 
-    def __init__(self, rules: Rules, data_dir: Path) -> None:
+    def __init__(self, rules: Rules, data_dir: Path, metrics=None) -> None:
         self.rules = rules
         self.shoe = Shoe(rules.num_decks)
         self.strategy = Strategy(data_dir / rules.strategy_file)
         self.stats = TrainingStats()
+        self.metrics = metrics if metrics is not None else NoOpMetricsClient()
         self._current_hand: Hand | None = None
         self._current_dealer_card: Card | None = None
         self._allowed_keys: set[str] | None = None
@@ -75,14 +84,20 @@ class Trainer:
         for _ in range(1000):
             if self.shoe.needs_shuffle():
                 self.shoe.shuffle()
+                self.metrics.shoe_shuffled()
 
             # Deal player hand (2 cards)
             hand = Hand()
-            hand.add_card(self.shoe.deal())
-            hand.add_card(self.shoe.deal())
+            card1 = self.shoe.deal()
+            self.metrics.card_dealt(card1.strategy_symbol())
+            hand.add_card(card1)
+            card2 = self.shoe.deal()
+            self.metrics.card_dealt(card2.strategy_symbol())
+            hand.add_card(card2)
 
             # Deal dealer up card
             dealer_card = self.shoe.deal()
+            self.metrics.card_dealt(dealer_card.strategy_symbol())
 
             # Skip blackjacks (no strategy decision needed)
             if hand.is_blackjack:
@@ -125,6 +140,23 @@ class Trainer:
         )
 
         self.stats.record(is_correct)
+
+        # Determine hand type for metrics
+        if self._current_hand.is_pair:
+            hand_type = "pair"
+        elif self._current_hand.is_soft:
+            hand_type = "soft"
+        else:
+            hand_type = "hard"
+
+        self.metrics.answer(
+            is_correct=is_correct,
+            hand_type=hand_type,
+            dealer_key=dealer_key,
+            strategy_key=row_key,
+            current_streak=self.stats.current_streak,
+            best_streak=self.stats.best_streak,
+        )
 
         return TrainingResult(
             player_hand=self._current_hand,
