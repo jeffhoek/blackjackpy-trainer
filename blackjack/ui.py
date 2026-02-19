@@ -69,14 +69,14 @@ def get_rules() -> Rules:
     for lvl, name in sorted(LEVEL_NAMES.items()):
         print(f"  {lvl} - {name}")
     while True:
-        level_input = input("Skill level (0-5) [0]: ").strip()
+        level_input = input("Skill level (0-7) [0]: ").strip()
         if level_input == "":
             level = 0
             break
-        if level_input in ("0", "1", "2", "3", "4", "5"):
+        if level_input in ("0", "1", "2", "3", "4", "5", "6", "7"):
             level = int(level_input)
             break
-        print("Please enter 0-5")
+        print("Please enter 0-7")
 
     return Rules(num_decks=num_decks, dealer_hits_soft_17=dealer_hits_soft_17, level=level)
 

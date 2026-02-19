@@ -191,7 +191,7 @@ class TestRules:
 
     def test_rules_str_with_level(self):
         rules = Rules(num_decks=6, level=1)
-        assert str(rules) == "6 decks, H17, Fundamentals"
+        assert str(rules) == "6 decks, H17, Hard Hands"
 
         rules = Rules(num_decks=6, level=5)
-        assert str(rules) == "6 decks, H17, Expert"
+        assert str(rules) == "6 decks, H17, Fundamentals"
