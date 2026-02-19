@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "A console application to train players on blackjack basic strategy"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "fastapi>=0.129.0",
+    "uvicorn[standard]>=0.41.0",
+]
 
 [project.optional-dependencies]
 metrics = ["statsd>=4.0"]
