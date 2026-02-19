@@ -2,49 +2,66 @@
 
 LEVEL_NAMES: dict[int, str] = {
     0: "All Hands",
-    1: "Fundamentals",
-    2: "Standard Decisions",
+    1: "Hard Hands",
+    2: "Soft Hands",
     3: "Splits",
-    4: "Doubles & Soft Hands",
-    5: "Expert",
+    4: "Always",
+    5: "Fundamentals",
+    6: "Advanced",
+    7: "Expert",
 }
 
 LEVEL_KEYS: dict[int, list[str]] = {
     1: [
-        # Hard 5-8 (always hit)
-        "5", "6", "7", "8",
-        # Hard 17-20 (always stand)
-        "17", "18", "19", "20",
-        # Hard 10-11 (double)
-        "10", "11",
-        # Pairs AA/88 (always split), TT (never split)
-        "AA", "88", "TT",
+        # Hard 5-20
+        "5", "6", "7", "8", "9", "10", "11", "12",
+        "13", "14", "15", "16", "17", "18", "19", "20",
     ],
     2: [
-        # Hard 13-16 (hit/stand threshold)
-        "13", "14", "15", "16",
-        # Soft A8/A9 (always stand)
-        "A8", "A9",
-        # Pair 55 (never split)
-        "55",
+        # Soft A2-A9
+        "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9",
     ],
     3: [
-        # All pairs except AA/88/TT/55
-        "22", "33", "44", "66", "77", "99",
+        # All pairs 22-AA
+        "22", "33", "44", "55", "66", "77", "88", "99", "TT", "AA",
     ],
     4: [
-        # Hard 9/12
-        "9", "12",
-        # Soft A2-A5
-        "A2", "A3", "A4", "A5",
+        # Hard: always hit
+        "5", "6", "7",
+        # Hard: always double
+        "11",
+        # Hard: always stand
+        "17", "18", "19", "20",
+        # Soft: always stand (soft 20)
+        "A9",
+        # Pairs: always split
+        "AA", "88",
+        # Pairs: always stand / never split
+        "TT",
     ],
     5: [
-        # Soft A6/A7 (hardest!)
+        # Hard: almost always / learnable thresholds
+        "8", "10", "13", "14",
+        # Soft: almost always stand
+        "A8",
+        # Pairs: never split (treat as hard 10)
+        "55",
+        # Pairs: split vs low dealer cards
+        "22", "33", "66",
+    ],
+    6: [
+        # Hard: learnable patterns
+        "9", "12",
+        # Soft: lower soft doubles
+        "A2", "A3", "A4", "A5",
+    ],
+    7: [
+        # Hard: surrender decisions, most complex
+        "15", "16",
+        # Soft: multi-action, most counter-intuitive
         "A6", "A7",
-        # Pair 77 (3 distinct actions in single-deck)
-        "77",
-        # Pair 99 (split/stand depending on dealer card)
-        "99",
+        # Pairs: restrictive split / classic gotchas
+        "44", "77", "99",
     ],
 }
 
@@ -53,13 +70,13 @@ def get_keys_for_level(level: int) -> set[str]:
     """Return the set of allowed strategy keys for a given level.
 
     Args:
-        level: Skill level (0 = all hands, 1-4 = specific subsets)
+        level: Skill level (0 = all hands, 1-7 = specific subsets)
 
     Returns:
         Set of strategy row keys for that level
 
     Raises:
-        ValueError: If level is not 0-4
+        ValueError: If level is not 0-7
     """
     if level == 0:
         # All keys from all levels combined
@@ -68,5 +85,5 @@ def get_keys_for_level(level: int) -> set[str]:
             all_keys.update(keys)
         return all_keys
     if level not in LEVEL_KEYS:
-        raise ValueError(f"Invalid level: {level}. Must be 0-5.")
+        raise ValueError(f"Invalid level: {level}. Must be 0-7.")
     return set(LEVEL_KEYS[level])
