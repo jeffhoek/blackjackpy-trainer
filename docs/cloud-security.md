@@ -148,7 +148,7 @@ Cloud Run and App Runner both forward stdout/stderr to their respective logging 
 
 ## Remediation Checklist
 
-- [ ] Add SRI hashes to all CDN assets in `web/index.html`
+- [x] Add SRI hashes to all CDN assets in `web/index.html`
 - [ ] Require authentication on the WebSocket endpoint (IAM or token-based)
 - [ ] Implement a concurrent connection cap with a `1013` close code for excess connections
 - [ ] Validate `Origin` header before `websocket.accept()`
