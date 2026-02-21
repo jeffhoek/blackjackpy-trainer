@@ -7,6 +7,8 @@
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css"
+    integrity="sha384-9ftsg11+LSxVUaknegCfeKvlkO9EdIPI2op725RqY87IvhyGjElmpjZlP3LhTQjn"
+    crossorigin="anonymous"
   />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -17,9 +19,21 @@
 <body>
   <div id="terminal"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-attach@0.9.0/lib/xterm-addon-attach.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"
+    integrity="sha384-xjfWUeCWdMtvpAb/SmM6lMzS6pQGcQa0loOl1d97j6Odw0vjK9nW3+dTb/bn/mwH"
+    crossorigin="anonymous"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"
+    integrity="sha384-dpjGwSSISUTz2taP54Bor7qkyMR20sSO9oe11UVYnGs2/YdUBf7HW30XKQx9PCzn"
+    crossorigin="anonymous"
+  ></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/xterm-addon-attach@0.9.0/lib/xterm-addon-attach.min.js"
+    integrity="sha384-FZ3dFU++JVp3cNkR7tt4iI70N4+lfEuiEyk5ljzlUsArQd1JP3kazo5RWeCsuc6E"
+    crossorigin="anonymous"
+  ></script>
   <script>
     const term = new Terminal({
       cursorBlink: true,
