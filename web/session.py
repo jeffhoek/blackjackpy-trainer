@@ -205,5 +205,5 @@ class WebSession:
         )
 
         rules = await self._get_rules()
-        trainer = Trainer(rules, self._data_dir)
+        trainer = await asyncio.to_thread(Trainer, rules, self._data_dir)
         await self._run_training_loop(trainer)
