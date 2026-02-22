@@ -102,9 +102,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     finally:
         _active_connections -= 1
         logger.info("WS closed (active=%d)", _active_connections)
-        await send_queue.join()
-        sender_task.cancel()
         receiver_task.cancel()
+        sender_task.cancel()
+        await asyncio.gather(sender_task, receiver_task, return_exceptions=True)
         try:
             await websocket.close()
         except Exception:
