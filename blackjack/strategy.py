@@ -14,12 +14,13 @@ if TYPE_CHECKING:
 
 _COLOR_RESET = "\033[0m"
 
-# Ordered most-prominent → least-prominent (rarest action gets index 0).
-_ACTION_COLOR_TIERS = [
-    "\033[1;95m",  # tier 1 (rarest) — bold bright magenta → R (Surrender)
-    "\033[93m",    # tier 2          — bright yellow       → D (Double)
-    "\033[96m",    # tier 3          — bright cyan         → P (Split)
-]
+_ACTION_COLORS: dict[str, str] = {
+    "S": "\033[92m",    # bright green        — Stand
+    "H": "\033[94m",    # bright blue         — Hit
+    "D": "\033[93m",    # bright yellow       — Double
+    "P": "\033[96m",    # bright cyan         — Split
+    "R": "\033[1;95m",  # bold bright magenta — Surrender
+}
 
 
 class Action:
@@ -219,26 +220,6 @@ class Strategy:
     def format_table(self, title: str, row_keys: set[str] | None = None) -> list[str]:
         """Return the strategy table as a list of formatted lines (with ANSI color)."""
         dealer_cols = self.DEALER_CARDS
-
-        # Count action frequencies across displayed rows only.
-        freq: dict[str, int] = {}
-        for key in self._table:
-            if row_keys is not None and key not in row_keys:
-                continue
-            for dc in dealer_cols:
-                action = self._table[key].get(dc, "")
-                if action:
-                    freq[action] = freq.get(action, 0) + 1
-
-        # Sort actions by frequency ascending (rarest first).
-        sorted_by_freq = sorted(freq, key=lambda a: freq[a])
-
-        # Assign color tiers to the rarest actions; most common get no color.
-        color_map: dict[str, str] = {}
-        for i, action in enumerate(sorted_by_freq):
-            if i < len(_ACTION_COLOR_TIERS):
-                color_map[action] = _ACTION_COLOR_TIERS[i]
-
         lines = [f"\n{title}\n", "      " + "".join(f"{c:>5}" for c in dealer_cols)]
         for key in self._table:
             if row_keys is not None and key not in row_keys:
@@ -246,7 +227,7 @@ class Strategy:
             cells = []
             for dc in dealer_cols:
                 action = self._table[key].get(dc, "?")
-                color = color_map.get(action, "")
+                color = _ACTION_COLORS.get(action, "")
                 if color:
                     cells.append(f"{color}{action:>5}{_COLOR_RESET}")
                 else:
