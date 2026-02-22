@@ -13,7 +13,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-    #terminal { width: 100%; height: 100%; }
+    #terminal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
@@ -49,7 +49,6 @@
     const fitAddon = new FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
-    fitAddon.fit();
     term.focus();
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -58,6 +57,7 @@
     ws.addEventListener('open', () => {
       const attachAddon = new AttachAddon.AttachAddon(ws);
       term.loadAddon(attachAddon);
+      resizeToViewport();
       term.focus();
     });
 
@@ -69,7 +69,23 @@
       term.writeln('\r\n[WebSocket error — is the server running?]');
     });
 
-    window.addEventListener('resize', () => fitAddon.fit());
+    function resizeToViewport() {
+      if (window.visualViewport) {
+        const vv = window.visualViewport;
+        const el = document.getElementById('terminal');
+        el.style.width  = vv.width  + 'px';
+        el.style.height = vv.height + 'px';
+        el.style.top    = vv.offsetTop  + 'px';
+        el.style.left   = vv.offsetLeft + 'px';
+      }
+      fitAddon.fit();
+    }
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', resizeToViewport);
+      window.visualViewport.addEventListener('scroll', resizeToViewport);
+    }
+    window.addEventListener('resize', resizeToViewport);
   </script>
 </body>
 </html>
