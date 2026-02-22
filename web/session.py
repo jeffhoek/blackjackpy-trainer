@@ -7,9 +7,9 @@ termios-based getch() and blocking print()/input() calls.
 import asyncio
 from pathlib import Path
 
-from blackjack.levels import LEVEL_NAMES
+from blackjack.levels import LEVEL_NAMES, get_keys_for_level
 from blackjack.rules import Rules
-from blackjack.strategy import Action
+from blackjack.strategy import Action, Strategy
 from blackjack.trainer import Trainer
 
 
@@ -128,6 +128,22 @@ class WebSession:
         )
 
     # ------------------------------------------------------------------
+    # Strategy chart display
+    # ------------------------------------------------------------------
+
+    async def _show_table(self, rules: Rules) -> None:
+        """Render the strategy chart for the chosen level and wait for a keypress."""
+        table_name = rules.strategy_file.replace(".csv", "").replace("-", " ").title()
+        level_name = LEVEL_NAMES.get(rules.level, f"Level {rules.level}")
+        title = f"{table_name} Basic Strategy \u2014 Level {rules.level}: {level_name}"
+        row_keys = get_keys_for_level(rules.level)
+        strategy = Strategy(self._data_dir / rules.strategy_file)
+        lines = strategy.format_table(title, row_keys=row_keys)
+        await self.send("\r\n" + "\r\n".join(lines) + "\r\n")
+        await self.send("\r\nPress any key to begin training...\r\n")
+        await self.recv_char()
+
+    # ------------------------------------------------------------------
     # Training loop (mirrors ui.run_training_loop)
     # ------------------------------------------------------------------
 
@@ -205,5 +221,11 @@ class WebSession:
         )
 
         rules = await self._get_rules()
+
+        await self.send("\r\nView strategy chart for this level? (y/n) [y]: ")
+        show = (await self.recv_line()).strip().lower()
+        if show in ("", "y", "yes"):
+            await self._show_table(rules)
+
         trainer = Trainer(rules, self._data_dir)
         await self._run_training_loop(trainer)
