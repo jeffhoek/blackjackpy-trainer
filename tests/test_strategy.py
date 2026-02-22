@@ -96,18 +96,21 @@ class TestStrategySingleDeck:
 
 class TestCheckAction:
     def test_correct_action(self, multi_deck_strategy):
-        is_correct, correct = multi_deck_strategy.check_action("S", "20", "10")
+        is_correct, correct, exc = multi_deck_strategy.check_action("S", "20", "10")
         assert is_correct
         assert correct == "S"
+        assert exc is None
 
     def test_incorrect_action(self, multi_deck_strategy):
-        is_correct, correct = multi_deck_strategy.check_action("H", "20", "10")
+        is_correct, correct, exc = multi_deck_strategy.check_action("H", "20", "10")
         assert not is_correct
         assert correct == "S"
+        assert exc is None
 
     def test_case_insensitive(self, multi_deck_strategy):
-        is_correct, _ = multi_deck_strategy.check_action("s", "20", "10")
+        is_correct, _, exc = multi_deck_strategy.check_action("s", "20", "10")
         assert is_correct
+        assert exc is None
 
 
 class TestStrategyErrors:

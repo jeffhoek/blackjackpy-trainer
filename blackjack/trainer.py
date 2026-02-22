@@ -20,6 +20,7 @@ class TrainingResult:
     player_action: str
     correct_action: str
     is_correct: bool
+    exception_description: str | None = None
 
     @property
     def feedback(self) -> str:
@@ -135,8 +136,8 @@ class Trainer:
         if dealer_key == "T":
             dealer_key = "10"
 
-        is_correct, correct_action = self.strategy.check_action(
-            action, row_key, dealer_key
+        is_correct, correct_action, exception = self.strategy.check_action(
+            action, row_key, dealer_key, hand=self._current_hand, rules=self.rules
         )
 
         self.stats.record(is_correct)
@@ -164,4 +165,5 @@ class Trainer:
             player_action=action.upper(),
             correct_action=correct_action,
             is_correct=is_correct,
+            exception_description=exception.description if exception is not None else None,
         )
