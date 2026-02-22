@@ -80,6 +80,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     break
                 if len(data) > _MAX_MESSAGE_BYTES:
                     logger.warning("Oversized message (%d bytes) — closing", len(data))
+                    await websocket.close(code=1009)
                     break
                 for ch in data:
                     await recv_queue.put(ch)
