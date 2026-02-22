@@ -50,6 +50,7 @@
     term.loadAddon(fitAddon);
     term.open(document.getElementById('terminal'));
     fitAddon.fit();
+    term.focus();
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
@@ -57,6 +58,7 @@
     ws.addEventListener('open', () => {
       const attachAddon = new AttachAddon.AttachAddon(ws);
       term.loadAddon(attachAddon);
+      term.focus();
     });
 
     ws.addEventListener('close', () => {
