@@ -112,6 +112,8 @@ def display_result(result, stats) -> None:
     else:
         feedback = f"\033[31m{result.feedback}\033[0m"  # red
     print(f"\n{feedback}")
+    if not result.is_correct and result.exception_description:
+        print(f"  \033[33mException: {result.exception_description}\033[0m")  # yellow
     print(f"Session: {stats}")
 
 

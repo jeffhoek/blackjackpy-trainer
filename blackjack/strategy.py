@@ -113,7 +113,7 @@ class Strategy:
         dealer_card: str,
         hand: Hand | None,
         rules: Rules | None,
-    ) -> str | None:
+    ) -> StrategyException | None:
         """Find the first matching exception, or None."""
         for exc in self._exceptions:
             if exc.row_key != row_key:
@@ -121,7 +121,7 @@ class Strategy:
             if dealer_card not in exc.dealer:
                 continue
             if self._check_conditions(exc.when, hand, rules):
-                return exc.action
+                return exc
         return None
 
     def _check_conditions(
@@ -179,9 +179,9 @@ class Strategy:
 
         base_action = self._table[row_key][dealer_card]
 
-        exception_action = self._find_exception(row_key, dealer_card, hand, rules)
-        if exception_action is not None:
-            return exception_action
+        exception = self._find_exception(row_key, dealer_card, hand, rules)
+        if exception is not None:
+            return exception.action
 
         return base_action
 
@@ -192,7 +192,7 @@ class Strategy:
         dealer_card: str,
         hand: Hand | None = None,
         rules: Rules | None = None,
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool, str, StrategyException | None]:
         """Check if a player's action is correct.
 
         Args:
@@ -203,11 +203,18 @@ class Strategy:
             rules: Optional Rules for rule-dependent exceptions
 
         Returns:
-            Tuple of (is_correct, correct_action)
+            Tuple of (is_correct, correct_action, matched_exception)
         """
-        correct = self.get_correct_action(row_key, dealer_card, hand, rules)
+        if row_key not in self._table:
+            raise KeyError(f"Unknown hand: {row_key}")
+        if dealer_card not in self._table[row_key]:
+            raise KeyError(f"Unknown dealer card: {dealer_card}")
+
+        base_action = self._table[row_key][dealer_card]
+        exception = self._find_exception(row_key, dealer_card, hand, rules)
+        correct = exception.action if exception is not None else base_action
         is_correct = player_action.upper() == correct
-        return is_correct, correct
+        return is_correct, correct, exception
 
     def format_table(self, title: str, row_keys: set[str] | None = None) -> list[str]:
         """Return the strategy table as a list of formatted lines (with ANSI color)."""

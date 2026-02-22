@@ -115,30 +115,51 @@ class TestCheckActionWithExceptions:
     def test_check_action_composition_correct(self, single_deck_strategy):
         """check_action should respect composition exceptions."""
         hand = Hand([Card(Rank.SIX, Suit.HEARTS), Card(Rank.TWO, Suit.CLUBS)])
-        is_correct, correct = single_deck_strategy.check_action(
+        is_correct, correct, exc = single_deck_strategy.check_action(
             "H", "8", "5", hand=hand
         )
         assert is_correct
         assert correct == "H"
+        assert exc is not None
 
     def test_check_action_composition_incorrect(self, single_deck_strategy):
         """Doubling (6,2) vs 5 should be wrong with exception active."""
         hand = Hand([Card(Rank.SIX, Suit.HEARTS), Card(Rank.TWO, Suit.CLUBS)])
-        is_correct, correct = single_deck_strategy.check_action(
+        is_correct, correct, exc = single_deck_strategy.check_action(
             "D", "8", "5", hand=hand
         )
         assert not is_correct
         assert correct == "H"
+        assert exc is not None
 
     def test_check_action_rule_dependent(self, single_deck_strategy):
         """check_action should respect rule-dependent exceptions."""
         hand = Hand([Card(Rank.ACE, Suit.HEARTS), Card(Rank.SEVEN, Suit.CLUBS)])
         rules = Rules(num_decks=1, dealer_hits_soft_17=True)
-        is_correct, correct = single_deck_strategy.check_action(
+        is_correct, correct, exc = single_deck_strategy.check_action(
             "H", "A7", "A", hand=hand, rules=rules
         )
         assert is_correct
         assert correct == "H"
+        assert exc is not None
+
+    def test_check_action_no_exception_returns_none(self, single_deck_strategy):
+        """check_action returns None exception when no exception matches."""
+        hand = Hand([Card(Rank.FIVE, Suit.HEARTS), Card(Rank.THREE, Suit.CLUBS)])
+        is_correct, correct, exc = single_deck_strategy.check_action(
+            "D", "8", "5", hand=hand
+        )
+        assert is_correct
+        assert correct == "D"
+        assert exc is None
+
+    def test_check_action_exception_has_description(self, single_deck_strategy):
+        """Matched exception object carries a non-empty description."""
+        hand = Hand([Card(Rank.SIX, Suit.HEARTS), Card(Rank.TWO, Suit.CLUBS)])
+        _, _, exc = single_deck_strategy.check_action("H", "8", "5", hand=hand)
+        assert exc is not None
+        assert isinstance(exc.description, str)
+        assert len(exc.description) > 0
 
 
 class TestTrainerIntegration:
@@ -182,3 +203,31 @@ class TestTrainerIntegration:
         result = trainer.check_answer("S")
         assert result.is_correct
         assert result.correct_action == "S"
+
+    def test_trainer_wrong_answer_exception_description_populated(self, data_dir):
+        """Wrong answer on an exception play includes the exception description."""
+        rules = Rules(num_decks=1)
+        trainer = Trainer(rules, data_dir)
+
+        hand = Hand([Card(Rank.SIX, Suit.HEARTS), Card(Rank.TWO, Suit.CLUBS)])
+        trainer._current_hand = hand
+        trainer._current_dealer_card = Card(Rank.FIVE, Suit.DIAMONDS)
+
+        result = trainer.check_answer("D")  # wrong — should be H
+        assert not result.is_correct
+        assert result.exception_description is not None
+        assert len(result.exception_description) > 0
+
+    def test_trainer_correct_base_play_no_exception_description(self, data_dir):
+        """Correct answer on a non-exception play has no exception description."""
+        rules = Rules(num_decks=1)
+        trainer = Trainer(rules, data_dir)
+
+        # Hard 16 vs 10 — no exception exists, correct is R (Surrender)
+        hand = Hand([Card(Rank.TEN, Suit.HEARTS), Card(Rank.SIX, Suit.CLUBS)])
+        trainer._current_hand = hand
+        trainer._current_dealer_card = Card(Rank.TEN, Suit.DIAMONDS)
+
+        result = trainer.check_answer("R")
+        assert result.is_correct
+        assert result.exception_description is None
