@@ -98,8 +98,8 @@ class Strategy:
         is_correct = player_action.upper() == correct
         return is_correct, correct
 
-    def print_table(self, title: str, row_keys: set[str] | None = None) -> None:
-        """Print the strategy table as a formatted ASCII table with color coding."""
+    def format_table(self, title: str, row_keys: set[str] | None = None) -> list[str]:
+        """Return the strategy table as a list of formatted lines (with ANSI color)."""
         dealer_cols = self.DEALER_CARDS
 
         # Count action frequencies across displayed rows only.
@@ -121,8 +121,7 @@ class Strategy:
             if i < len(_ACTION_COLOR_TIERS):
                 color_map[action] = _ACTION_COLOR_TIERS[i]
 
-        print(f"\n{title}\n")
-        print("      " + "".join(f"{c:>5}" for c in dealer_cols))
+        lines = [f"\n{title}\n", "      " + "".join(f"{c:>5}" for c in dealer_cols)]
         for key in self._table:
             if row_keys is not None and key not in row_keys:
                 continue
@@ -134,4 +133,10 @@ class Strategy:
                     cells.append(f"{color}{action:>5}{_COLOR_RESET}")
                 else:
                     cells.append(f"{action:>5}")
-            print(f"  {key:>4}{''.join(cells)}")
+            lines.append(f"  {key:>4}{''.join(cells)}")
+        return lines
+
+    def print_table(self, title: str, row_keys: set[str] | None = None) -> None:
+        """Print the strategy table as a formatted ASCII table with color coding."""
+        for line in self.format_table(title, row_keys=row_keys):
+            print(line)
