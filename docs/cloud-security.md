@@ -54,39 +54,29 @@ Any client that can reach the service URL can open a session. On Cloud Run with 
 
 ---
 
-## 3. HIGH — Resource Exhaustion (no connection limit)
+## 3. HIGH — Resource Exhaustion (no connection limit) ✅ FIXED
 
-**File:** `web/server.py:53-54`
+**File:** `web/server.py`
 
 Each WebSocket connection creates two asyncio tasks and a `Trainer` instance that persists for the life of the session. There is no cap on concurrent connections.
 
 An attacker can open thousands of connections, exhausting memory and asyncio task slots, which would degrade or crash the service.
 
-**Fix:**
+**Fix applied:** `_active_connections` counter with `_MAX_CONNECTIONS` (default 100, env-configurable via `WS_MAX_CONNECTIONS`). New connections over the cap receive close code `1013 Try Again Later`. nginx `limit_conn ws_cl 5` adds a per-IP layer. `Trainer` CSV load moved off the event loop with `asyncio.to_thread()`.
 
-- Set a global connection counter with a hard limit (e.g., 100 concurrent sessions), rejecting new connections over the limit with a `1013 Try Again Later` close code.
-- Configure Cloud Run `--concurrency` and `--max-instances` as a secondary guardrail, not a primary one.
-- Consider a platform-level rate limiter (Cloud Armor on GCP, WAF on AWS) to throttle connection attempts per IP.
+**Additional fixes:**
+- Per-message size limit: messages > `WS_MAX_MESSAGE_BYTES` (default 256) drop the connection.
+- Idle read timeout: sessions idle > `WS_IDLE_TIMEOUT` (default 300s) self-close cleanly.
 
 ---
 
-## 4. MEDIUM — WebSocket Origin Not Validated
+## 4. MEDIUM — WebSocket Origin Not Validated ✅ FIXED
 
-**File:** `web/server.py:24`
+**File:** `web/server.py`
 
 `websocket.accept()` does not check the `Origin` header. Any page on the web can instruct a logged-in user's browser to open a WebSocket to your service (cross-site WebSocket hijacking). This is lower severity if auth is added (item 2), but still worth closing independently.
 
-**Fix:** Read the `Origin` header from the WebSocket handshake request and reject connections from unexpected origins:
-
-```python
-origin = websocket.headers.get("origin", "")
-if origin not in ALLOWED_ORIGINS:
-    await websocket.close(code=1008)
-    return
-await websocket.accept()
-```
-
-Define `ALLOWED_ORIGINS` as an environment variable so it can be set per deployment without code changes.
+**Fix applied:** Origin is checked before `websocket.accept()`. Rejected connections receive close code `1008 Policy Violation`. Set `WS_ALLOWED_ORIGINS` (comma-separated) to enable the check; leaving it empty skips the check for local dev.
 
 ---
 
@@ -106,9 +96,9 @@ But if a user navigates to `http://`, they will use an unencrypted WebSocket.
 
 ---
 
-## 6. LOW — Silent Exception Handling Hides Errors
+## 6. LOW — Silent Exception Handling Hides Errors ✅ FIXED
 
-**File:** `web/server.py:61`
+**File:** `web/server.py`
 
 ```python
 except Exception:
@@ -117,17 +107,7 @@ except Exception:
 
 All session errors are swallowed silently. In production this makes it impossible to detect abuse patterns, unexpected crashes, or errors caused by malformed input.
 
-**Fix:** Replace bare `pass` with structured logging:
-
-```python
-import logging
-logger = logging.getLogger(__name__)
-
-except Exception:
-    logger.exception("Unhandled error in WebSocket session")
-```
-
-Cloud Run and App Runner both forward stdout/stderr to their respective logging services (Cloud Logging, CloudWatch) automatically — no extra configuration needed.
+**Fix applied:** `logger.exception("Unhandled error in WebSocket session")` replaces the bare `pass`. Connection open/close events and rejection warnings are also logged at INFO/WARNING levels. Cloud Run and App Runner forward stdout/stderr to Cloud Logging / CloudWatch automatically.
 
 ---
 
@@ -150,7 +130,9 @@ Cloud Run and App Runner both forward stdout/stderr to their respective logging 
 
 - [x] Add SRI hashes to all CDN assets in `web/index.html`
 - [ ] Require authentication on the WebSocket endpoint (IAM or token-based)
-- [ ] Implement a concurrent connection cap with a `1013` close code for excess connections
-- [ ] Validate `Origin` header before `websocket.accept()`
-- [ ] Enforce HTTPS redirect at the platform or load balancer level
-- [ ] Replace `except Exception: pass` with structured logging
+- [x] Implement a concurrent connection cap with a `1013` close code for excess connections (`WS_MAX_CONNECTIONS`)
+- [x] Validate `Origin` header before `websocket.accept()` (`WS_ALLOWED_ORIGINS`)
+- [ ] Enforce HTTPS redirect at the platform or load balancer level (see `web/nginx.conf`)
+- [x] Replace `except Exception: pass` with structured logging
+- [x] Per-message size limit — drop connection on messages > `WS_MAX_MESSAGE_BYTES` (default 256)
+- [x] Idle session timeout — self-close after `WS_IDLE_TIMEOUT` seconds of inactivity (default 300)
