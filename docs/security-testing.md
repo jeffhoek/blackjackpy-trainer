@@ -101,7 +101,7 @@ gcloud run services update blackjack-trainer \
 
 ## 3. Oversized message
 
-Messages larger than `WS_MAX_MESSAGE_BYTES` (default 256 bytes) cause the server to close the connection with code `1009`.
+Messages larger than `WS_MAX_MESSAGE_BYTES` (default 16 bytes) cause the server to close the connection with code `1009`. The limit is set low because the UI only ever sends single keystrokes or short line inputs (deck count, y/n, etc.) — 16 bytes covers any legitimate xterm.js keypress, including multi-byte escape sequences.
 
 ```bash
 python3 -c "
@@ -112,7 +112,7 @@ async def test():
         'wss://$SERVICE_URL/ws',
         additional_headers={'Origin': 'https://$SERVICE_URL'}
     ) as ws:
-        await ws.send('x' * 300)
+        await ws.send('x' * 20)
         try:
             while True:
                 msg = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -194,7 +194,7 @@ gcloud logging read 'resource.type="cloud_run_revision" severity>=WARNING' \
 **Expected log lines:**
 - `Rejected WS — bad origin: https://evil.example.com`
 - `Rejected WS — cap reached (3/3)`
-- `Oversized message (300 bytes) — closing`
+- `Oversized message (20 bytes) — closing`
 - `Idle timeout — closing session`
 
 ---

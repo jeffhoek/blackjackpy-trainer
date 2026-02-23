@@ -13,7 +13,7 @@ from web.session import Disconnected, WebSession
 logger = logging.getLogger(__name__)
 
 _MAX_CONNECTIONS = int(os.environ.get("WS_MAX_CONNECTIONS", "100"))
-_MAX_MESSAGE_BYTES = int(os.environ.get("WS_MAX_MESSAGE_BYTES", "256"))
+_MAX_MESSAGE_BYTES = int(os.environ.get("WS_MAX_MESSAGE_BYTES", "16"))
 _IDLE_TIMEOUT = float(os.environ.get("WS_IDLE_TIMEOUT", "300"))
 _ALLOWED_ORIGINS: set[str] = set(
     filter(None, os.environ.get("WS_ALLOWED_ORIGINS", "").split(","))
