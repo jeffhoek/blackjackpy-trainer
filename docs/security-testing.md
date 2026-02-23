@@ -182,7 +182,26 @@ curl -s https://$SERVICE_URL/ | grep -o 'integrity="[^"]*"'
 
 ---
 
-## 6. Cloud Run logs
+## 6. Security headers
+
+All five security headers should be present on every HTTP response.
+
+```bash
+curl -sI https://$SERVICE_URL/ | grep -Ei "strict-transport|x-frame|x-content-type|referrer-policy|content-security-policy"
+```
+
+**Expected** — five lines, one per header:
+```
+strict-transport-security: max-age=31536000; includeSubDomains
+x-frame-options: DENY
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+content-security-policy: default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; ...
+```
+
+---
+
+## 7. Cloud Run logs
 
 After running the above tests, verify the server logged the rejection events:
 
