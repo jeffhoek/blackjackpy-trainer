@@ -5,8 +5,8 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, Response
 
 from web.session import Disconnected, WebSession
 
@@ -22,6 +22,29 @@ _ALLOWED_ORIGINS: set[str] = set(
 _active_connections: int = 0
 
 app = FastAPI()
+
+_SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": (
+        "default-src 'none'; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "img-src 'self';"
+    ),
+}
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next: object) -> Response:
+    response = await call_next(request)  # type: ignore[operator]
+    response.headers.update(_SECURITY_HEADERS)
+    return response
+
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 _INDEX_HTML = Path(__file__).parent / "index.html"
