@@ -23,7 +23,7 @@ Verify it is set before running any test:
 If `WS_ALLOWED_ORIGINS` is set, connections with a bad or missing `Origin` header are rejected with HTTP 403.
 
 ```bash
-python3 -c "
+uv run python3 -c "
 import asyncio, websockets
 
 async def test():
@@ -60,7 +60,7 @@ gcloud run services update blackjack-trainer \
 Then open 4 connections:
 
 ```bash
-python3 -c "
+uv run python3 -c "
 import asyncio, websockets
 
 async def open_conn(n):
@@ -104,7 +104,7 @@ gcloud run services update blackjack-trainer \
 Messages larger than `WS_MAX_MESSAGE_BYTES` (default 16 bytes) cause the server to close the connection with code `1009`. The limit is set low because the UI only ever sends single keystrokes or short line inputs (deck count, y/n, etc.) — 16 bytes covers any legitimate xterm.js keypress, including multi-byte escape sequences.
 
 ```bash
-python3 -c "
+uv run python3 -c "
 import asyncio, websockets
 
 async def test():
@@ -140,7 +140,7 @@ gcloud run services update blackjack-trainer \
 ```
 
 ```bash
-python3 -c "
+uv run python3 -c "
 import asyncio, websockets
 
 async def test():
