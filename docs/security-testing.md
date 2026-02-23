@@ -48,11 +48,13 @@ asyncio.run(test())
 
 ## 2. Connection cap
 
-When the cap is reached, new connections get close code `1013`.
+When the cap is reached, new connections are rejected with HTTP 503.
 
-To test without opening 100 connections, temporarily lower the cap in Cloud Run:
-```
-WS_MAX_CONNECTIONS=3
+To test without opening 100 connections, temporarily lower the cap:
+```bash
+gcloud run services update blackjack-trainer \
+  --region us-central1 \
+  --set-env-vars WS_MAX_CONNECTIONS=3
 ```
 
 Then open 4 connections:
@@ -86,7 +88,14 @@ asyncio.run(test())
 "
 ```
 
-**Expected:** First 3 connections accepted, 4th rejected with code `1013`. Restore `WS_MAX_CONNECTIONS=100` after.
+**Expected:** First 3 connections accepted, 4th rejected at handshake: `HTTP 503`.
+
+Restore after:
+```bash
+gcloud run services update blackjack-trainer \
+  --region us-central1 \
+  --set-env-vars WS_MAX_CONNECTIONS=100
+```
 
 ---
 
@@ -123,9 +132,11 @@ asyncio.run(test())
 
 The server closes sessions that send no messages for `WS_IDLE_TIMEOUT` seconds (default 300).
 
-To avoid waiting 5 minutes, temporarily set in Cloud Run:
-```
-WS_IDLE_TIMEOUT=10
+To avoid waiting 5 minutes, temporarily lower the timeout:
+```bash
+gcloud run services update blackjack-trainer \
+  --region us-central1 \
+  --set-env-vars WS_IDLE_TIMEOUT=10
 ```
 
 ```bash
@@ -147,7 +158,14 @@ asyncio.run(test())
 "
 ```
 
-**Expected:** Server closes the connection after ~10 seconds. Restore `WS_IDLE_TIMEOUT=300` after.
+**Expected:** Server closes the connection after ~10 seconds.
+
+Restore after:
+```bash
+gcloud run services update blackjack-trainer \
+  --region us-central1 \
+  --set-env-vars WS_IDLE_TIMEOUT=300
+```
 
 ---
 

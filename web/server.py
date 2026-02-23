@@ -38,11 +38,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     origin = websocket.headers.get("origin", "")
     if _ALLOWED_ORIGINS and origin not in _ALLOWED_ORIGINS:
-        await websocket.close(code=1008)
+        await websocket.send({"type": "websocket.http.response.start", "status": 403, "headers": []})
+        await websocket.send({"type": "websocket.http.response.body", "body": b"", "more_body": False})
         logger.warning("Rejected WS — bad origin: %s", origin)
         return
     if _active_connections >= _MAX_CONNECTIONS:
-        await websocket.close(code=1013)
+        await websocket.send({"type": "websocket.http.response.start", "status": 503, "headers": []})
+        await websocket.send({"type": "websocket.http.response.body", "body": b"", "more_body": False})
         logger.warning(
             "Rejected WS — cap reached (%d/%d)", _active_connections, _MAX_CONNECTIONS
         )
