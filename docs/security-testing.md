@@ -150,9 +150,10 @@ async def test():
     ) as ws:
         print('Connected, waiting for idle timeout...')
         try:
-            await asyncio.wait_for(ws.recv(), timeout=15)
+            while True:
+                await ws.recv()  # drain server messages; never send anything back
         except websockets.exceptions.ConnectionClosed as e:
-            print(f'Server closed idle connection: {e.code}')
+            print(f'Server closed idle connection: {e.code}')  # expect 1011
 
 asyncio.run(test())
 "
