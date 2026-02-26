@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blackjack-trainer
+  namespace: blackjack
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: blackjack-trainer
+  template:
+    metadata:
+      labels:
+        app: blackjack-trainer
+    spec:
+      containers:
+        - name: blackjack-trainer
+          # Replace ACCOUNT_ID with your AWS account ID before first apply
+          # e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer:latest
+          image: ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: WS_MAX_CONNECTIONS
+              value: "100"
+            - name: WS_IDLE_TIMEOUT
+              value: "300"
+            # After first deploy, add WS_ALLOWED_ORIGINS once the ALB hostname is known:
+            # - name: WS_ALLOWED_ORIGINS
+            #   value: "http://<ALB_HOSTNAME>"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
