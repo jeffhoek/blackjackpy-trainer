@@ -30,7 +30,8 @@ _SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Content-Security-Policy": (
         "default-src 'none'; "
-        "script-src 'self' https://cdn.jsdelivr.net; "
+        "script-src 'self' https://cdn.jsdelivr.net "
+        "'sha256-ZswfTY7H35rbv8WC7NXBoiC7WNu86vSzCDChNWwZZDM='; "
         "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "connect-src 'self'; "
         "font-src 'self'; "
@@ -48,11 +49,17 @@ async def add_security_headers(request: Request, call_next: object) -> Response:
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 _INDEX_HTML = Path(__file__).parent / "index.html"
+_APP_JS = Path(__file__).parent / "app.js"
 
 
 @app.get("/")
 async def index() -> HTMLResponse:
     return HTMLResponse(_INDEX_HTML.read_text())
+
+
+@app.get("/app.js")
+async def app_js() -> Response:
+    return Response(_APP_JS.read_text(), media_type="application/javascript")
 
 
 @app.websocket("/ws")
