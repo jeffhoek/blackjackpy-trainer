@@ -15,9 +15,9 @@ spec:
     spec:
       containers:
         - name: blackjack-trainer
-          # Replace ACCOUNT_ID with your AWS account ID before first apply
+          # Replace 958170895933 with your AWS account ID before first apply
           # e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer:latest
-          image: ACCOUNT_ID.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer:latest
+          image: 958170895933.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer:latest
           ports:
             - containerPort: 8080
           env:

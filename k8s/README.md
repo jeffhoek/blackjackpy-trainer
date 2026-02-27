@@ -1,8 +1,9 @@
-# blackjackpy-trainer — EKS Deployment
+# blackjackpy-trainer — EKS Deployment Runbook
 
 Deploys the blackjackpy-trainer FastAPI + WebSocket app to the `eks-proto` cluster
-in `us-east-2` using Amazon ECR for images and an AWS Application Load Balancer for ingress.
-WebSocket sticky sessions are enabled on the ALB so each browser stays on the same pod.
+in `us-east-2` using Amazon ECR for images and an AWS Application Load Balancer for
+ingress. WebSocket sticky sessions are enabled on the ALB so each browser stays on
+the same pod.
 
 ## Files in this directory
 
@@ -13,96 +14,195 @@ WebSocket sticky sessions are enabled on the ALB so each browser stays on the sa
 | `service.yaml` | ClusterIP, port 80 → 8080 |
 | `ingress.yaml` | ALB ingress, sticky sessions, 600s idle timeout |
 
-CI/CD workflow: `../.github/workflows/deploy.yml` (triggers on push to `main`)
+CI/CD workflow: `../.github/workflows/deploy.yml` (triggers on push to `main`, also manually dispatchable)
 
 ---
 
-## 1. Prerequisites Checklist
-
-Work through each item and run its verification command before deploying.
-
-**AWS CLI configured**
-```bash
-aws sts get-caller-identity   # should return your account ID
-```
-
-**kubectl pointed at eks-proto**
-```bash
-aws eks update-kubeconfig --name eks-proto --region us-east-2
-kubectl get nodes             # should list cluster nodes
-```
-
-**helm ≥ 3.x installed**
-```bash
-helm version
-```
-
-**ECR repository exists** (see [Step 2](#2-create-ecr-repository))
-```bash
-aws ecr describe-repositories --repository-names blackjackpy-trainer --region us-east-2
-```
-
-**OIDC provider registered in IAM** (see [Step 3](#3-install-aws-load-balancer-controller))
-```bash
-OIDC_ID=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
-  --query "cluster.identity.oidc.issuer" --output text | cut -d'/' -f5)
-aws iam list-open-id-connect-providers | grep $OIDC_ID
-```
-
-**AWS Load Balancer Controller installed** (see [Step 3](#3-install-aws-load-balancer-controller))
-```bash
-kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
-# Expected: 2 pods in Running state
-```
-
-**`deployment.yaml` image updated** — replace `ACCOUNT_ID` with your real account ID:
-```bash
-grep "ACCOUNT_ID" deployment.yaml   # should return nothing if already updated
-```
+> **Two OIDC providers, two purposes — don't confuse them:**
+> - **GitHub OIDC** (`token.actions.githubusercontent.com`) — lets GitHub Actions runners assume AWS IAM roles. Set up once per AWS account.
+> - **EKS OIDC** (per-cluster URL) — lets Kubernetes pods assume AWS IAM roles via IRSA. Requires a live cluster.
 
 ---
 
-## 2. Create ECR Repository
+## Phase 1 — Before provisioning the cluster
 
-One-time setup. Skip if the repository already exists.
+Everything in this phase can be completed with only the AWS CLI, Docker, and git.
+No active EKS cluster is required.
+
+### 1. Verify prerequisites
+
+```bash
+aws sts get-caller-identity   # AWS CLI configured and credentialed
+docker version                # Docker running locally
+helm version                  # helm ≥ 3.x
+```
+
+### 2. Create ECR repository
 
 ```bash
 aws ecr create-repository \
   --repository-name blackjackpy-trainer \
   --region us-east-2 \
   --image-scanning-configuration scanOnPush=true
-# Note the repositoryUri in the output:
+# Note the repositoryUri in the output — you'll need it in step 4
 # e.g. 123456789012.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer
+```
+
+Verify it exists any time:
+```bash
+aws ecr describe-repositories --repository-names blackjackpy-trainer --region us-east-2
+```
+
+### 3. Set up GitHub Actions OIDC in AWS IAM
+
+This lets the GitHub Actions runner assume an AWS role without long-lived access keys.
+
+#### 3a. Register the GitHub OIDC provider (one-time per AWS account)
+
+Check first — it only needs to exist once regardless of how many repos use it:
+```bash
+aws iam list-open-id-connect-providers | grep token.actions.githubusercontent.com
+```
+
+If nothing is returned, create it:
+```bash
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+```
+
+#### 3b. Create the deploy IAM role
+
+```bash
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+```
+```
+cat > gh-deploy-trust-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
+      "StringLike": {
+        "token.actions.githubusercontent.com:sub": "repo:jeffhoek/blackjackpy-trainer:ref:refs/heads/main"
+      }
+    }
+  }]
+}
+EOF
+```
+
+```
+aws iam create-role \
+  --role-name blackjackpy-trainer-github-deploy \
+  --assume-role-policy-document file://gh-deploy-trust-policy.json
+```
+
+```
+# ECR push access
+aws iam attach-role-policy \
+  --role-name blackjackpy-trainer-github-deploy \
+  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+```
+
+```
+# EKS describe (needed so the runner can call aws eks update-kubeconfig)
+aws iam put-role-policy \
+  --role-name blackjackpy-trainer-github-deploy \
+  --policy-name eks-access \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:DescribeCluster"],"Resource":"*"}]}'
+```
+
+Verify the role and its trust policy:
+```bash
+aws iam get-role --role-name blackjackpy-trainer-github-deploy \
+  --query 'Role.AssumeRolePolicyDocument' --output json
+```
+
+#### 3c. Add the GitHub secret
+
+In your repo: **Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret name | Value |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/blackjackpy-trainer-github-deploy` |
+
+### 4. Update deployment.yaml with your ECR account ID
+
+```bash
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+sed -i '' "s|ACCOUNT_ID|${AWS_ACCOUNT_ID}|" deployment.yaml
+```
+
+```
+# Confirm the placeholder is gone
+grep "image:" deployment.yaml
+# Expected: image: 123456789012.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer:latest
+```
+
+### 5. Commit, push, and merge to main
+
+```bash
+git add ../k8s/ ../.github/workflows/deploy.yml
+git commit -m "Add EKS deployment manifests and CI/CD workflow"
+git push origin <your-branch>
+# Open a PR and merge to main
+```
+
+The GitHub Actions workflow will trigger on merge. It will **succeed** through the
+ECR image build and push, then **fail** at the `aws eks update-kubeconfig` step
+because the cluster doesn't exist yet — that's expected. Confirm the image landed
+in ECR:
+
+```bash
+aws ecr describe-images --repository-name blackjackpy-trainer --region us-east-2
 ```
 
 ---
 
-## 3. Install AWS Load Balancer Controller
+## Phase 2 — After the cluster is provisioned
 
-### Check if already installed
+Everything below requires `eks-proto` to be running.
+
+### 6. Connect kubectl to the cluster
+
+```bash
+aws eks update-kubeconfig --name eks-proto --region us-east-2
+kubectl get nodes   # should list cluster nodes
+```
+
+### 7. Install the AWS Load Balancer Controller
+
+The ALB Ingress controller watches for `Ingress` resources and provisions AWS
+Application Load Balancers. It uses IRSA (IAM Roles for Service Accounts), which
+requires the **EKS cluster's own OIDC provider** registered in IAM — separate from
+the GitHub one in step 3a.
+
+#### Check if already installed
 
 ```bash
 kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
-```
-```
 helm list -n kube-system | grep aws-load-balancer-controller
 ```
 
-If either command shows a running pod or installed release → skip to [Step 4](#4-first-deploy).
+If either shows a running pod or installed release → skip to [Step 8](#8-grant-the-github-actions-role-kubectl-access).
 
-### 3a. Register the cluster OIDC provider in IAM
+#### 7a. Register the EKS cluster OIDC provider in IAM
 
-The EKS cluster has an OIDC issuer URL, but it must also be registered as an IAM
-Identity Provider before IAM Roles for Service Accounts (IRSA) work.
-
-Check:
+Check first (each cluster has a unique OIDC ID):
 ```bash
 OIDC_ID=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
   --query "cluster.identity.oidc.issuer" --output text | cut -d'/' -f5)
 aws iam list-open-id-connect-providers | grep $OIDC_ID
 ```
 
-If nothing is returned, register it. With `eksctl` (easiest):
+If missing, register it. With `eksctl` (easiest):
 ```bash
 eksctl utils associate-iam-oidc-provider \
   --cluster eks-proto --region us-east-2 --approve
@@ -122,7 +222,7 @@ aws iam create-open-id-connect-provider \
   --thumbprint-list $THUMBPRINT
 ```
 
-### 3b. Create the LBC IAM policy
+#### 7b. Create the LBC IAM policy
 
 ```bash
 curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.8.2/docs/install/iam_policy.json
@@ -131,7 +231,7 @@ aws iam create-policy \
   --policy-document file://iam_policy.json
 ```
 
-### 3c. Create the IRSA role
+#### 7c. Create the LBC IRSA role
 
 ```bash
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -164,9 +264,10 @@ aws iam attach-role-policy \
   --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/AWSLoadBalancerControllerIAMPolicy
 ```
 
-### 3d. Install via Helm
+#### 7d. Install via Helm
 
 ```bash
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 VPC_ID=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
   --query "cluster.resourcesVpcConfig.vpcId" --output text)
 
@@ -181,7 +282,7 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set vpcId=${VPC_ID}
 ```
 
-### 3e. Verify it's healthy
+#### 7e. Verify it's healthy
 
 ```bash
 kubectl get deployment -n kube-system aws-load-balancer-controller
@@ -189,107 +290,16 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 
 kubectl logs -n kube-system \
   -l app.kubernetes.io/name=aws-load-balancer-controller --tail=20
-# Should show "Starting" with no errors
+# Should show no errors
 ```
 
----
+### 8. Grant the GitHub Actions role kubectl access
 
-## 4. First Deploy
+This allows the GitHub Actions runner to run `kubectl` commands against the cluster.
 
-Update `deployment.yaml` with your real ECR account ID and push the initial image:
-
-```bash
-# Set your account ID
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-2.amazonaws.com/blackjackpy-trainer
-
-# Authenticate Docker to ECR
-aws ecr get-login-password --region us-east-2 \
-  | docker login --username AWS --password-stdin ${ECR_URI}
-
-# Build and push
-docker build -t ${ECR_URI}:latest ..
-docker push ${ECR_URI}:latest
-
-# Patch the placeholder in deployment.yaml
-sed -i "s|ACCOUNT_ID|${AWS_ACCOUNT_ID}|" deployment.yaml
-
-# Apply all manifests
-kubectl apply -f .
-```
-
-Watch the rollout:
-```bash
-kubectl rollout status deployment/blackjack-trainer -n blackjack
-kubectl get pods -n blackjack
-```
-
----
-
-## 5. CI/CD Setup (GitHub Actions + OIDC)
-
-The workflow in `.github/workflows/deploy.yml` uses GitHub's OIDC token to assume
-an AWS role — no long-lived access keys needed.
-
-### 5a. Register GitHub OIDC provider in IAM (one-time)
-
-Check if it already exists:
-```bash
-aws iam list-open-id-connect-providers | grep token.actions.githubusercontent.com
-```
-
-If missing:
-```bash
-aws iam create-open-id-connect-provider \
-  --url https://token.actions.githubusercontent.com \
-  --client-id-list sts.amazonaws.com \
-  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
-```
-
-### 5b. Create the deploy IAM role
-
+With `eksctl` (recommended):
 ```bash
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
-cat > gh-deploy-trust-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {
-      "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
-    },
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-      "StringLike": {
-        "token.actions.githubusercontent.com:sub": "repo:jeffhoek/blackjackpy-trainer:ref:refs/heads/main"
-      }
-    }
-  }]
-}
-EOF
-
-aws iam create-role \
-  --role-name blackjackpy-trainer-github-deploy \
-  --assume-role-policy-document file://gh-deploy-trust-policy.json
-
-# ECR push access
-aws iam attach-role-policy \
-  --role-name blackjackpy-trainer-github-deploy \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
-
-# EKS describe (needed for aws eks update-kubeconfig)
-aws iam put-role-policy \
-  --role-name blackjackpy-trainer-github-deploy \
-  --policy-name eks-access \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["eks:DescribeCluster"],"Resource":"*"}]}'
-```
-
-### 5c. Grant the role kubectl access
-
-With `eksctl` (recommended — avoids editing aws-auth manually):
-```bash
 eksctl create iamidentitymapping \
   --cluster eks-proto \
   --region us-east-2 \
@@ -298,70 +308,67 @@ eksctl create iamidentitymapping \
   --group system:masters
 ```
 
-Without `eksctl`, patch the ConfigMap directly:
+Without `eksctl`, edit the aws-auth ConfigMap directly (careful — malformed YAML breaks cluster auth):
 ```bash
-kubectl patch configmap/aws-auth -n kube-system --type merge \
-  -p "{\"data\":{\"mapRoles\":\"$(kubectl get configmap aws-auth -n kube-system \
-    -o jsonpath='{.data.mapRoles}')- rolearn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy\n  username: github-deploy\n  groups:\n  - system:masters\n\"}}"
+kubectl edit configmap aws-auth -n kube-system
+# Add under mapRoles:
+#   - rolearn: arn:aws:iam::<ACCOUNT_ID>:role/blackjackpy-trainer-github-deploy
+#     username: github-deploy
+#     groups:
+#       - system:masters
 ```
-> Prefer `eksctl` — the manual patch is brittle if mapRoles already has content.
 
-### 5d. Add GitHub secret
+### 9. Trigger the full deploy
 
-In your repo: **Settings → Secrets and variables → Actions → New repository secret**
+Push a commit to `main` or dispatch the workflow manually from the GitHub Actions UI.
+The full pipeline — build → push → `kubectl apply` → rolling update — should now
+complete without errors.
 
-| Secret name | Value |
-|---|---|
-| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::<ACCOUNT_ID>:role/blackjackpy-trainer-github-deploy` |
+### 10. Lock WebSocket origins
 
----
-
-## 6. Post-Deploy: Lock WebSocket Origins
-
-After the ALB is provisioned, restrict WebSocket connections to the known hostname:
+Once the ALB is provisioned (takes ~60s after first `kubectl apply`), restrict
+WebSocket connections to the known hostname:
 
 ```bash
 ALB_HOST=$(kubectl get ingress blackjack-trainer -n blackjack \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-echo "ALB: $ALB_HOST"
+echo "ALB hostname: $ALB_HOST"
 
 kubectl set env deployment/blackjack-trainer -n blackjack \
   WS_ALLOWED_ORIGINS="http://${ALB_HOST}"
 ```
 
-Then update the `WS_ALLOWED_ORIGINS` env var in `deployment.yaml` to persist it
-across future `kubectl apply` runs.
+Then persist it in `deployment.yaml` by uncommenting and filling in the
+`WS_ALLOWED_ORIGINS` env var so future `kubectl apply` runs don't revert it.
 
 ---
 
-## 7. Verification
+## Verification
 
 ```bash
-# 1. Pods healthy
+# Pods running
 kubectl get pods -n blackjack
 
-# 2. ALB provisioned (ADDRESS column populated — takes ~60s)
+# ALB hostname assigned (ADDRESS column — takes ~60s to populate)
 kubectl get ingress -n blackjack
 
-# 3. Smoke test — get the URL
+# Get the URL and open it
 kubectl get ingress blackjack-trainer -n blackjack \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-# Open http://<hostname> in a browser — xterm.js terminal should load
+# Open http://<hostname> — the xterm.js terminal should load and be playable
 
-# 4. WebSocket: open browser DevTools → Network → WS tab
-#    The /ws connection should appear and stay open
-
-# 5. CI/CD: push a commit to main → Actions tab in GitHub → deploy job passes
+# WebSocket: DevTools → Network → WS tab → /ws connection stays open
 ```
 
 ---
 
-## 8. Troubleshooting
+## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Ingress stuck, no ADDRESS | LBC not running or IRSA role misconfigured | Check `kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller` and review LBC logs |
-| WebSocket disconnects at open | `WS_ALLOWED_ORIGINS` mismatch | Verify the env var matches the exact ALB hostname (including protocol) |
+| GH Actions: `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Role missing, trust policy sub mismatch, or GitHub OIDC provider not registered | Check role exists: `aws iam get-role --role-name blackjackpy-trainer-github-deploy`. Verify trust policy `sub` matches the OIDC token (add the debug step from the workflow to print it) |
+| Ingress stuck, no ADDRESS after 3+ min | LBC not running or its IRSA role misconfigured | `kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller` then check logs |
+| GH Actions `kubectl` unauthorized | Deploy role not added to aws-auth / access entries | Re-run `eksctl create iamidentitymapping` from step 8 |
+| WebSocket disconnects immediately | `WS_ALLOWED_ORIGINS` mismatch | Verify the env var matches the exact ALB hostname including `http://` prefix |
 | Pods in `CrashLoopBackOff` | App startup failure | `kubectl logs -n blackjack <pod-name>` |
-| ECR image pull error | Wrong image URI or missing ECR permissions | Verify the image field in deployment.yaml and that the node IAM role has ECR read access |
-| GitHub Actions `kubectl` unauthorized | Role not in aws-auth / access entries | Re-run the `eksctl create iamidentitymapping` command in Step 5c |
+| ECR image pull error | Wrong image URI or node role lacks ECR read access | Check image field in `deployment.yaml`; verify node group IAM role has `AmazonEC2ContainerRegistryReadOnly` |
