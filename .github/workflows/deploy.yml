@@ -78,7 +78,9 @@ jobs:
 
       - name: Apply k8s manifests
         if: steps.cluster-check.outputs.exists == 'true'
-        run: kubectl apply -f k8s/
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/
 
       - name: Rolling update with new image
         if: steps.cluster-check.outputs.exists == 'true'
