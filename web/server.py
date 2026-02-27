@@ -31,7 +31,7 @@ _SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'none'; "
         "script-src 'self' https://cdn.jsdelivr.net; "
-        "style-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "connect-src 'self'; "
         "font-src 'self'; "
         "img-src 'self';"

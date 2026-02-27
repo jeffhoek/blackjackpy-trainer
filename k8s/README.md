@@ -225,7 +225,7 @@ aws iam create-open-id-connect-provider \
 #### 7b. Create the LBC IAM policy
 
 ```bash
-curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.8.2/docs/install/iam_policy.json
+curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
 aws iam create-policy \
   --policy-name AWSLoadBalancerControllerIAMPolicy \
   --policy-document file://iam_policy.json
@@ -237,7 +237,8 @@ aws iam create-policy \
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 OIDC_ISSUER=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
   --query "cluster.identity.oidc.issuer" --output text | sed 's|https://||')
-
+```
+```
 cat > lbc-trust-policy.json <<EOF
 {
   "Version": "2012-10-17",
@@ -254,11 +255,13 @@ cat > lbc-trust-policy.json <<EOF
   }]
 }
 EOF
-
+```
+```
 aws iam create-role \
   --role-name eks-proto-aws-load-balancer-controller \
   --assume-role-policy-document file://lbc-trust-policy.json
-
+```
+```
 aws iam attach-role-policy \
   --role-name eks-proto-aws-load-balancer-controller \
   --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/AWSLoadBalancerControllerIAMPolicy
@@ -270,9 +273,11 @@ aws iam attach-role-policy \
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 VPC_ID=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
   --query "cluster.resourcesVpcConfig.vpcId" --output text)
-
+```
+```
 helm repo add eks https://aws.github.io/eks-charts && helm repo update
-
+```
+```
 helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName=eks-proto \
@@ -281,13 +286,26 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
   --set region=us-east-2 \
   --set vpcId=${VPC_ID}
 ```
+On success you should see something like:
+```
+NAME: aws-load-balancer-controller
+LAST DEPLOYED: Fri Feb 27 10:11:12 2026
+NAMESPACE: kube-system
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+NOTES:
+AWS Load Balancer controller installed!
+```
 
 #### 7e. Verify it's healthy
 
 ```bash
 kubectl get deployment -n kube-system aws-load-balancer-controller
 # Expected: READY 2/2
-
+```
+```
 kubectl logs -n kube-system \
   -l app.kubernetes.io/name=aws-load-balancer-controller --tail=20
 # Should show no errors
