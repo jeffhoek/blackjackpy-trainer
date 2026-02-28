@@ -10,7 +10,7 @@ the same pod.
 | File | Purpose |
 |---|---|
 | `namespace.yaml` | `blackjack` namespace |
-| `deployment.yaml` | 2-replica Deployment — update `ACCOUNT_ID` before first apply |
+| `deployment.yaml` | 2-replica Deployment |
 | `service.yaml` | ClusterIP, port 80 → 8080 |
 | `ingress.yaml` | ALB ingress, sticky sessions, 600s idle timeout |
 
@@ -18,9 +18,11 @@ CI/CD workflow: `../.github/workflows/deploy.yml` (triggers on push to `main`, a
 
 ---
 
-> **Two OIDC providers, two purposes — don't confuse them:**
-> - **GitHub OIDC** (`token.actions.githubusercontent.com`) — lets GitHub Actions runners assume AWS IAM roles. Set up once per AWS account.
-> - **EKS OIDC** (per-cluster URL) — lets Kubernetes pods assume AWS IAM roles via IRSA. Requires a live cluster.
+> **Note on OIDC:**
+> **GitHub OIDC** (`token.actions.githubusercontent.com`) lets GitHub Actions runners assume AWS IAM
+> roles without long-lived keys. This is the only OIDC provider you need to manage manually.
+> The AWS Load Balancer Controller uses **EKS Pod Identity** (not IRSA) — provisioned automatically
+> by the cluster Terraform (`eks-proto`).
 
 ---
 
@@ -34,7 +36,6 @@ No active EKS cluster is required.
 ```bash
 aws sts get-caller-identity   # AWS CLI configured and credentialed
 docker version                # Docker running locally
-helm version                  # helm ≥ 3.x
 ```
 
 ### 2. Create ECR repository
@@ -156,9 +157,8 @@ git push origin <your-branch>
 ```
 
 The GitHub Actions workflow will trigger on merge. It will **succeed** through the
-ECR image build and push, then **fail** at the `aws eks update-kubeconfig` step
-because the cluster doesn't exist yet — that's expected. Confirm the image landed
-in ECR:
+ECR image build and push, then **skip** the kubectl steps because the cluster doesn't
+exist yet — that's expected. Confirm the image landed in ECR:
 
 ```bash
 aws ecr describe-images --repository-name blackjackpy-trainer --region us-east-2
@@ -168,7 +168,9 @@ aws ecr describe-images --repository-name blackjackpy-trainer --region us-east-2
 
 ## Phase 2 — After the cluster is provisioned
 
-Everything below requires `eks-proto` to be running.
+Everything below requires `eks-proto` to be running. The AWS Load Balancer Controller
+is provisioned automatically by the cluster Terraform (`lbc.tf` in `eks-proto`) —
+no manual Helm installation needed.
 
 ### 6. Connect kubectl to the cluster
 
@@ -177,138 +179,17 @@ aws eks update-kubeconfig --name eks-proto --region us-east-2
 kubectl get nodes   # should list cluster nodes
 ```
 
-### 7. Install the AWS Load Balancer Controller
-
-The ALB Ingress controller watches for `Ingress` resources and provisions AWS
-Application Load Balancers. It uses IRSA (IAM Roles for Service Accounts), which
-requires the **EKS cluster's own OIDC provider** registered in IAM — separate from
-the GitHub one in step 3a.
-
-#### Check if already installed
-
-```bash
-kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
-helm list -n kube-system | grep aws-load-balancer-controller
-```
-
-If either shows a running pod or installed release → skip to [Step 8](#8-grant-the-github-actions-role-kubectl-access).
-
-#### 7a. Register the EKS cluster OIDC provider in IAM
-
-Check first (each cluster has a unique OIDC ID):
-```bash
-OIDC_ID=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
-  --query "cluster.identity.oidc.issuer" --output text | cut -d'/' -f5)
-aws iam list-open-id-connect-providers | grep $OIDC_ID
-```
-
-If missing, register it. With `eksctl` (easiest):
-```bash
-eksctl utils associate-iam-oidc-provider \
-  --cluster eks-proto --region us-east-2 --approve
-```
-
-Without `eksctl`:
-```bash
-OIDC_URL=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
-  --query "cluster.identity.oidc.issuer" --output text)
-THUMBPRINT=$(openssl s_client -connect oidc.eks.us-east-2.amazonaws.com:443 \
-  -showcerts </dev/null 2>/dev/null \
-  | openssl x509 -fingerprint -sha1 -noout \
-  | sed 's/://g' | cut -d= -f2 | tr '[:upper:]' '[:lower:]')
-aws iam create-open-id-connect-provider \
-  --url $OIDC_URL \
-  --client-id-list sts.amazonaws.com \
-  --thumbprint-list $THUMBPRINT
-```
-
-#### 7b. Create the LBC IAM policy
-
-```bash
-curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-aws iam create-policy \
-  --policy-name AWSLoadBalancerControllerIAMPolicy \
-  --policy-document file://iam_policy.json
-```
-
-#### 7c. Create the LBC IRSA role
-
-```bash
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-OIDC_ISSUER=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
-  --query "cluster.identity.oidc.issuer" --output text | sed 's|https://||')
-```
-```
-cat > lbc-trust-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_ISSUER}" },
-    "Action": "sts:AssumeRoleWithWebIdentity",
-    "Condition": {
-      "StringEquals": {
-        "${OIDC_ISSUER}:sub": "system:serviceaccount:kube-system:aws-load-balancer-controller",
-        "${OIDC_ISSUER}:aud": "sts.amazonaws.com"
-      }
-    }
-  }]
-}
-EOF
-```
-```
-aws iam create-role \
-  --role-name eks-proto-aws-load-balancer-controller \
-  --assume-role-policy-document file://lbc-trust-policy.json
-```
-```
-aws iam attach-role-policy \
-  --role-name eks-proto-aws-load-balancer-controller \
-  --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/AWSLoadBalancerControllerIAMPolicy
-```
-
-#### 7d. Install via Helm
-
-```bash
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-VPC_ID=$(aws eks describe-cluster --name eks-proto --region us-east-2 \
-  --query "cluster.resourcesVpcConfig.vpcId" --output text)
-```
-```
-helm repo add eks https://aws.github.io/eks-charts && helm repo update
-```
-```
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=eks-proto \
-  --set serviceAccount.create=true \
-  --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=arn:aws:iam::${AWS_ACCOUNT_ID}:role/eks-proto-aws-load-balancer-controller" \
-  --set region=us-east-2 \
-  --set vpcId=${VPC_ID}
-```
-On success you should see something like:
-```
-NAME: aws-load-balancer-controller
-LAST DEPLOYED: Fri Feb 27 10:11:12 2026
-NAMESPACE: kube-system
-STATUS: deployed
-REVISION: 1
-DESCRIPTION: Install complete
-TEST SUITE: None
-NOTES:
-AWS Load Balancer controller installed!
-```
-
-#### 7e. Verify it's healthy
+### 7. Verify the AWS Load Balancer Controller is healthy
 
 ```bash
 kubectl get deployment -n kube-system aws-load-balancer-controller
 # Expected: READY 2/2
 ```
-```
+
+If not ready, check logs before proceeding — the ingress won't get an ALB until it is:
+```bash
 kubectl logs -n kube-system \
   -l app.kubernetes.io/name=aws-load-balancer-controller --tail=20
-# Should show no errors
 ```
 
 ### 8. Grant the GitHub Actions role kubectl access
@@ -385,8 +266,8 @@ kubectl get ingress blackjack-trainer -n blackjack \
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | GH Actions: `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Role missing, trust policy sub mismatch, or GitHub OIDC provider not registered | Check role exists: `aws iam get-role --role-name blackjackpy-trainer-github-deploy`. Verify trust policy `sub` matches the OIDC token (add the debug step from the workflow to print it) |
-| Ingress stuck, no ADDRESS after 3+ min | LBC not running or its IRSA role misconfigured | `kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller` then check logs |
+| Ingress stuck, no ADDRESS after 3+ min | LBC not running or its Pod Identity association misconfigured | `kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller` then check logs; verify Pod Identity association with `aws eks list-pod-identity-associations --cluster-name eks-proto` |
 | GH Actions `kubectl` unauthorized | Deploy role not added to aws-auth / access entries | Re-run `eksctl create iamidentitymapping` from step 8 |
 | WebSocket disconnects immediately | `WS_ALLOWED_ORIGINS` mismatch | Verify the env var matches the exact ALB hostname including `http://` prefix |
 | Pods in `CrashLoopBackOff` | App startup failure | `kubectl logs -n blackjack <pod-name>` |
-| ECR image pull error | Wrong image URI or node role lacks ECR read access | Check image field in `deployment.yaml`; verify node group IAM role has `AmazonEC2ContainerRegistryReadOnly` |
+| ECR image pull error | Wrong image URI | Check image field in `deployment.yaml`; node group IAM has ECR read access by default via the EKS module |
