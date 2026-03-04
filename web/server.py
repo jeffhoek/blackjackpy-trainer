@@ -134,6 +134,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         _active_connections -= 1
         logger.info("WS closed (active=%d)", _active_connections)
         receiver_task.cancel()
+        # Drain the send queue so final stats are flushed before closing.
+        try:
+            await asyncio.wait_for(send_queue.join(), timeout=5.0)
+        except (asyncio.TimeoutError, Exception):
+            pass
         sender_task.cancel()
         await asyncio.gather(sender_task, receiver_task, return_exceptions=True)
         try:
