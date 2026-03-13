@@ -166,6 +166,28 @@ def run_training_loop(trainer: Trainer) -> None:
     display_final_stats(trainer.stats)
 
 
+def show_strategy_table(rules: "Rules", data_dir: Path) -> None:
+    """Prompt user to view the strategy chart, then display it."""
+    from .levels import get_keys_for_level
+
+    choice = input("\nView strategy chart for this level? (y/n) [y]: ").strip().lower()
+    if choice not in ("", "y", "yes"):
+        return
+
+    table_name = rules.strategy_file.replace(".csv", "").replace("-", " ").title()
+    level_name = LEVEL_NAMES.get(rules.level, f"Level {rules.level}")
+    title = f"{table_name} Basic Strategy \u2014 Level {rules.level}: {level_name}"
+    row_keys = get_keys_for_level(rules.level)
+
+    from .strategy import Strategy
+
+    strategy = Strategy(data_dir / rules.strategy_file)
+    strategy.print_table(title, row_keys=row_keys)
+
+    print("\nPress any key to begin training...")
+    getch()
+
+
 def main(data_dir: Path | None = None, metrics=None) -> None:
     """Main entry point for the UI."""
     if data_dir is None:
@@ -173,5 +195,6 @@ def main(data_dir: Path | None = None, metrics=None) -> None:
 
     display_welcome()
     rules = get_rules()
+    show_strategy_table(rules, data_dir)
     trainer = Trainer(rules, data_dir, metrics=metrics)
     run_training_loop(trainer)
