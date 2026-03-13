@@ -1,5 +1,6 @@
 """Console user interface for the trainer."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,6 +8,9 @@ from .levels import LEVEL_NAMES
 from .rules import Rules
 from .strategy import Action
 from .trainer import Trainer
+
+# Number of lines reserved for the fixed top bar
+_TOP_BAR_LINES = 2
 
 
 def getch() -> str:
@@ -30,9 +34,38 @@ def getch() -> str:
         return msvcrt.getch().decode("utf-8", errors="ignore")
 
 
+def _get_terminal_rows() -> int:
+    """Get terminal height in rows."""
+    try:
+        return os.get_terminal_size().lines
+    except OSError:
+        return 24
+
+
 def clear_screen() -> None:
     """Clear the terminal screen."""
     print("\033[2J\033[H", end="")
+
+
+def _setup_top_bar() -> None:
+    """Set up a fixed top bar with action commands and a scroll region below."""
+    rows = _get_terminal_rows()
+    # Clear screen and move to top
+    print("\033[2J\033[H", end="")
+    # Draw the top bar
+    bar = "[S]tand  [H]it  [D]ouble  s[P]lit  su[R]render  [Q]uit"
+    print(f"\033[7m {bar:<{os.get_terminal_size().columns - 1}}\033[0m")
+    print("\033[90m" + "─" * os.get_terminal_size().columns + "\033[0m", end="")
+    # Set scroll region to rows below the top bar
+    print(f"\033[{_TOP_BAR_LINES + 1};{rows}r", end="")
+    # Move cursor into the scroll region
+    print(f"\033[{_TOP_BAR_LINES + 1};1H", end="", flush=True)
+
+
+def _teardown_top_bar() -> None:
+    """Reset the scroll region to full screen."""
+    rows = _get_terminal_rows()
+    print(f"\033[1;{rows}r", end="", flush=True)
 
 
 def get_rules() -> Rules:
@@ -92,8 +125,7 @@ def get_action() -> str | None:
     Returns:
         The action string, or None to quit
     """
-    print("\n[S]tand  [H]it  [D]ouble  s[P]lit  su[R]render  [Q]uit")
-    print("Your action: ", end="", flush=True)
+    print("Action: ", end="", flush=True)
     while True:
         action = getch().upper()
         if action == "Q":
@@ -145,22 +177,27 @@ def display_final_stats(stats) -> None:
 
 def run_training_loop(trainer: Trainer) -> None:
     """Run the main training loop."""
-    print(f"\nRules: {trainer.rules}")
-    print("\nStarting training session... (Q to quit)\n")
+    _setup_top_bar()
+    print(f"Rules: {trainer.rules}")
+    print()
 
-    while True:
-        # Deal a new hand
-        player_hand, dealer_card = trainer.deal_hand()
-        display_hand(player_hand, dealer_card)
+    try:
+        while True:
+            # Deal a new hand
+            player_hand, dealer_card = trainer.deal_hand()
+            display_hand(player_hand, dealer_card)
 
-        # Get player's action
-        action = get_action()
-        if action is None:
-            break
+            # Get player's action
+            action = get_action()
+            if action is None:
+                break
 
-        # Check and display result
-        result = trainer.check_answer(action)
-        display_result(result, trainer.stats)
+            # Check and display result
+            result = trainer.check_answer(action)
+            display_result(result, trainer.stats)
+            print()
+    finally:
+        _teardown_top_bar()
 
     trainer.metrics.end_session(trainer.stats.total)
     display_final_stats(trainer.stats)
