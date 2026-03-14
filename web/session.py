@@ -5,6 +5,7 @@ termios-based getch() and blocking print()/input() calls.
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 from blackjack.levels import LEVEL_NAMES, get_keys_for_level
@@ -24,6 +25,9 @@ class WebSession:
     outgoing text from send_queue.
     """
 
+    # Number of lines reserved for the fixed top bar
+    _TOP_BAR_LINES = 2
+
     def __init__(
         self,
         send_queue: asyncio.Queue,
@@ -33,6 +37,13 @@ class WebSession:
         self._send_q = send_queue
         self._recv_q = recv_queue
         self._data_dir = data_dir
+        self._cols = 80
+        self._rows = 24
+
+    def set_size(self, cols: int, rows: int) -> None:
+        """Update the terminal dimensions (called by the server on resize)."""
+        self._cols = max(cols, 40)
+        self._rows = max(rows, 10)
 
     # ------------------------------------------------------------------
     # Low-level I/O helpers
@@ -144,49 +155,78 @@ class WebSession:
         await self.recv_char()
 
     # ------------------------------------------------------------------
+    # Fixed top bar (mirrors ui._setup_top_bar / _teardown_top_bar)
+    # ------------------------------------------------------------------
+
+    async def _setup_top_bar(self) -> None:
+        """Set up a fixed top bar with action commands and a scroll region below."""
+        # Clear screen and move to top
+        await self.send("\033[2J\033[H")
+        # Draw the top bar (inverse video)
+        bar = "[S]tand  [H]it  [D]ouble  s[P]lit  su[R]render  [Q]uit"
+        await self.send(f"\033[7m {bar:<{self._cols - 1}}\033[0m")
+        # Separator line
+        await self.send("\r\n\033[90m" + "\u2500" * self._cols + "\033[0m")
+        # Set scroll region below the top bar
+        await self.send(f"\033[{self._TOP_BAR_LINES + 1};{self._rows}r")
+        # Move cursor into the scroll region
+        await self.send(f"\033[{self._TOP_BAR_LINES + 1};1H")
+
+    async def _teardown_top_bar(self) -> None:
+        """Reset the scroll region to full screen."""
+        await self.send(f"\033[1;{self._rows}r")
+
+    # ------------------------------------------------------------------
     # Training loop (mirrors ui.run_training_loop)
     # ------------------------------------------------------------------
 
     async def _run_training_loop(self, trainer: Trainer) -> None:
-        await self.send(f"\r\nRules: {trainer.rules}\r\n")
-        await self.send("\r\nStarting training session... (Q to quit)\r\n\r\n")
+        await self._setup_top_bar()
+        await self.send(f"Rules: {trainer.rules}\r\n\r\n")
 
-        while True:
-            player_hand, dealer_card = trainer.deal_hand()
-            await self.send(
-                f"\r\nYour hand: {player_hand}  Dealer shows: {dealer_card}\r\n"
-            )
-
-            await self.send(
-                "\r\n[S]tand  [H]it  [D]ouble  s[P]lit  su[R]render  [Q]uit\r\n"
-            )
-            await self.send("Your action: ")
-
-            # Single-keypress input
-            action: str | None = None
+        try:
             while True:
-                ch = await self.recv_char()
-                upper = ch.upper()
-                if upper == "Q":
-                    await self.send(upper + "\r\n")
-                    action = None
-                    break
-                if upper in Action.ALL:
-                    await self.send(upper + "\r\n")
-                    action = upper
-                    break
-                # Ignore unrecognised keys silently
+                player_hand, dealer_card = trainer.deal_hand()
+                await self.send(
+                    f"\r\nYour hand: {player_hand}  Dealer shows: {dealer_card}\r\n"
+                )
 
-            if action is None:
-                break
+                await self.send("Action: ")
 
-            result = trainer.check_answer(action)
-            if result.is_correct:
-                feedback = f"\033[32m{result.feedback}\033[0m"
-            else:
-                feedback = f"\033[31m{result.feedback}\033[0m"
-            await self.send(f"\r\n{feedback}\r\n")
-            await self.send(f"Session: {trainer.stats}\r\n")
+                # Single-keypress input (timed)
+                start = time.monotonic()
+                action: str | None = None
+                while True:
+                    ch = await self.recv_char()
+                    upper = ch.upper()
+                    if upper == "Q":
+                        await self.send(upper + "\r\n")
+                        action = None
+                        break
+                    if upper in Action.ALL:
+                        await self.send(upper + "\r\n")
+                        action = upper
+                        break
+                    # Ignore unrecognised keys silently
+                elapsed = time.monotonic() - start
+
+                if action is None:
+                    break
+
+                result = trainer.check_answer(action, response_time=elapsed)
+                if result.is_correct:
+                    feedback = f"\033[32m{result.feedback}\033[0m"
+                else:
+                    feedback = f"\033[31m{result.feedback}\033[0m"
+                time_str = f"  ({elapsed:.1f}s)" if elapsed > 0 else ""
+                await self.send(f"\r\n{feedback}{time_str}\r\n")
+                if not result.is_correct and result.exception_description:
+                    await self.send(
+                        f"  \033[33mException: {result.exception_description}\033[0m\r\n"
+                    )
+                await self.send(f"Session: {trainer.stats}\r\n")
+        finally:
+            await self._teardown_top_bar()
 
         trainer.metrics.end_session(trainer.stats.total)
 
@@ -195,6 +235,11 @@ class WebSession:
         await self.send("          SESSION COMPLETE\r\n")
         await self.send("=" * 50 + "\r\n")
         await self.send(f"\r\nFinal Score: {trainer.stats}\r\n")
+        if trainer.stats.avg_time is not None:
+            await self.send(
+                f"Avg correct response: {trainer.stats.avg_time:.1f}s"
+                f"  Best: {trainer.stats.best_time:.1f}s\r\n"
+            )
         if trainer.stats.total > 0:
             if trainer.stats.percentage >= 90:
                 await self.send("Excellent! You've mastered basic strategy!\r\n")
