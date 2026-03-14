@@ -5,6 +5,7 @@ termios-based getch() and blocking print()/input() calls.
 """
 
 import asyncio
+import time
 from pathlib import Path
 
 from blackjack.levels import LEVEL_NAMES, get_keys_for_level
@@ -162,7 +163,8 @@ class WebSession:
             )
             await self.send("Your action: ")
 
-            # Single-keypress input
+            # Single-keypress input (timed)
+            start = time.monotonic()
             action: str | None = None
             while True:
                 ch = await self.recv_char()
@@ -176,16 +178,18 @@ class WebSession:
                     action = upper
                     break
                 # Ignore unrecognised keys silently
+            elapsed = time.monotonic() - start
 
             if action is None:
                 break
 
-            result = trainer.check_answer(action)
+            result = trainer.check_answer(action, response_time=elapsed)
             if result.is_correct:
                 feedback = f"\033[32m{result.feedback}\033[0m"
             else:
                 feedback = f"\033[31m{result.feedback}\033[0m"
-            await self.send(f"\r\n{feedback}\r\n")
+            time_str = f"  ({elapsed:.1f}s)" if elapsed > 0 else ""
+            await self.send(f"\r\n{feedback}{time_str}\r\n")
             await self.send(f"Session: {trainer.stats}\r\n")
 
         trainer.metrics.end_session(trainer.stats.total)
@@ -195,6 +199,11 @@ class WebSession:
         await self.send("          SESSION COMPLETE\r\n")
         await self.send("=" * 50 + "\r\n")
         await self.send(f"\r\nFinal Score: {trainer.stats}\r\n")
+        if trainer.stats.avg_time is not None:
+            await self.send(
+                f"Avg correct response: {trainer.stats.avg_time:.1f}s"
+                f"  Best: {trainer.stats.best_time:.1f}s\r\n"
+            )
         if trainer.stats.total > 0:
             if trainer.stats.percentage >= 90:
                 await self.send("Excellent! You've mastered basic strategy!\r\n")
