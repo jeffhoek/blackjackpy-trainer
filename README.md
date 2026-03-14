@@ -4,33 +4,98 @@ A console application to help you master blackjack basic strategy through practi
 
 ## Quickstart
 
+Clone and enter the directory
 ```bash
-# Clone and enter the directory
-git clone <repo-url>
-cd blackjackpy-trainer
+git clone https://github.com/jeffhoek/blackjackpy-trainer.git && cd blackjackpy-trainer
+```
 
-# Run with uv (recommended)
+### `uv`
+Update dependencies
+```
+uv sync
+```
+
+Run with uv (recommended)
+```
 uv run python main.py
+```
 
-# Or with standard Python
+### Or with standard Python
+```
 pip install -e .
+```
+```
 python main.py
 ```
 
 ## CLI Options
 
+Print a strategy table and exit
 ```bash
-# Print a strategy table and exit
 uv run python main.py --table multi-deck
+```
+```
+Multi Deck Basic Strategy
 
-# Filter the table to a specific skill level (0-5)
-uv run python main.py --table multi-deck --level 3
+          2    3    4    5    6    7    8    9   10    A
+    20    S    S    S    S    S    S    S    S    S    S
+    19    S    S    S    S    S    S    S    S    S    S
+    18    S    S    S    S    S    S    S    S    S    S
+    17    S    S    S    S    S    S    S    S    S    S
+    16    S    S    S    S    S    H    H    R    R    R
+    15    S    S    S    S    S    H    H    H    R    H
+    14    S    S    S    S    S    H    H    H    H    H
+    13    S    S    S    S    S    H    H    H    H    H
+    12    H    H    S    S    S    H    H    H    H    H
+    11    D    D    D    D    D    D    D    D    D    H
+    10    D    D    D    D    D    D    D    D    H    H
+     9    H    D    D    D    D    H    H    H    H    H
+     8    H    H    H    H    H    H    H    H    H    H
+     7    H    H    H    H    H    H    H    H    H    H
+     6    H    H    H    H    H    H    H    H    H    H
+     5    H    H    H    H    H    H    H    H    H    H
+    A9    S    S    S    S    S    S    S    S    S    S
+    A8    S    S    S    S    S    S    S    S    S    S
+    A7    S    D    D    D    D    S    S    H    H    H
+    A6    H    D    D    D    D    H    H    H    H    H
+    A5    H    H    D    D    D    H    H    H    H    H
+    A4    H    H    D    D    D    H    H    H    H    H
+    A3    H    H    H    D    D    H    H    H    H    H
+    A2    H    H    H    D    D    H    H    H    H    H
+    AA    P    P    P    P    P    P    P    P    P    P
+    TT    S    S    S    S    S    S    S    S    S    S
+    99    P    P    P    P    P    S    P    P    S    S
+    88    P    P    P    P    P    P    P    P    P    R
+    77    P    P    P    P    P    P    H    H    H    H
+    66    P    P    P    P    P    H    H    H    H    H
+    55    D    D    D    D    D    D    D    D    H    H
+    44    H    H    H    H    P    P    H    H    H    H
+    33    P    P    P    P    P    P    H    H    H    H
+    22    P    P    P    P    P    P    H    H    H    H
+```
+
+Filter the table to a specific skill level (0-5)
+```
+uv run python main.py --table multi-deck --level 7
+```
+```
+Multi Deck Basic Strategy — Level 7: Expert
+
+          2    3    4    5    6    7    8    9   10    A
+    16    S    S    S    S    S    H    H    R    R    R
+    15    S    S    S    S    S    H    H    H    R    H
+    A7    S    D    D    D    D    S    S    H    H    H
+    A6    H    D    D    D    D    H    H    H    H    H
+    99    P    P    P    P    P    S    P    P    S    S
+    77    P    P    P    P    P    P    H    H    H    H
+    44    H    H    H    H    P    P    H    H    H    H
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--table NAME` | Print a strategy table and exit (e.g. `single-deck`, `multi-deck`) |
 | `--level N` | With `--table`, filter to rows for skill level N (0=All, 1=Fundamentals, 2=Standard Decisions, 3=Splits, 4=Doubles & Soft Hands, 5=Expert) |
+
 
 ## How to Play
 
