@@ -38,8 +38,9 @@ class TrainingStats:
         self.total = 0
         self.current_streak = 0
         self.best_streak = 0
+        self._correct_times: list[float] = []
 
-    def record(self, is_correct: bool) -> None:
+    def record(self, is_correct: bool, response_time: float = 0.0) -> None:
         """Record a result."""
         self.total += 1
         if is_correct:
@@ -47,6 +48,8 @@ class TrainingStats:
             self.current_streak += 1
             if self.current_streak > self.best_streak:
                 self.best_streak = self.current_streak
+            if response_time > 0:
+                self._correct_times.append(response_time)
         else:
             self.current_streak = 0
 
@@ -57,8 +60,25 @@ class TrainingStats:
             return 0.0
         return (self.correct / self.total) * 100
 
+    @property
+    def avg_time(self) -> float | None:
+        """Average response time for correct answers in seconds."""
+        if not self._correct_times:
+            return None
+        return sum(self._correct_times) / len(self._correct_times)
+
+    @property
+    def best_time(self) -> float | None:
+        """Fastest correct response time in seconds."""
+        if not self._correct_times:
+            return None
+        return min(self._correct_times)
+
     def __str__(self) -> str:
-        return f"{self.correct}/{self.total} correct ({self.percentage:.0f}%)"
+        s = f"{self.correct}/{self.total} correct ({self.percentage:.0f}%)"
+        if self.avg_time is not None:
+            s += f"  avg: {self.avg_time:.1f}s"
+        return s
 
 
 class Trainer:
@@ -116,7 +136,7 @@ class Trainer:
 
         return hand, dealer_card
 
-    def check_answer(self, action: str) -> TrainingResult:
+    def check_answer(self, action: str, response_time: float = 0.0) -> TrainingResult:
         """Check the player's answer for the current hand.
 
         Args:
@@ -140,7 +160,7 @@ class Trainer:
             action, row_key, dealer_key, hand=self._current_hand, rules=self.rules
         )
 
-        self.stats.record(is_correct)
+        self.stats.record(is_correct, response_time=response_time)
 
         # Determine hand type for metrics
         if self._current_hand.is_pair:

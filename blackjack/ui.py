@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 from pathlib import Path
 
 from .levels import LEVEL_NAMES
@@ -137,13 +138,14 @@ def get_action() -> str | None:
         # Ignore invalid keys silently
 
 
-def display_result(result, stats) -> None:
+def display_result(result, stats, response_time: float = 0.0) -> None:
     """Display the result and current stats."""
     if result.is_correct:
         feedback = f"\033[32m{result.feedback}\033[0m"  # green
     else:
         feedback = f"\033[31m{result.feedback}\033[0m"  # red
-    print(f"\n{feedback}")
+    time_str = f"  ({response_time:.1f}s)" if response_time > 0 else ""
+    print(f"\n{feedback}{time_str}")
     if not result.is_correct and result.exception_description:
         print(f"  \033[33mException: {result.exception_description}\033[0m")  # yellow
     print(f"Session: {stats}")
@@ -165,6 +167,8 @@ def display_final_stats(stats) -> None:
     print("          SESSION COMPLETE")
     print("=" * 50)
     print(f"\nFinal Score: {stats}")
+    if stats.avg_time is not None:
+        print(f"Avg correct response: {stats.avg_time:.1f}s  Best: {stats.best_time:.1f}s")
     if stats.total > 0:
         if stats.percentage >= 90:
             print("Excellent! You've mastered basic strategy!")
@@ -187,14 +191,16 @@ def run_training_loop(trainer: Trainer) -> None:
             player_hand, dealer_card = trainer.deal_hand()
             display_hand(player_hand, dealer_card)
 
-            # Get player's action
+            # Get player's action (timed)
+            start = time.monotonic()
             action = get_action()
+            elapsed = time.monotonic() - start
             if action is None:
                 break
 
             # Check and display result
-            result = trainer.check_answer(action)
-            display_result(result, trainer.stats)
+            result = trainer.check_answer(action, response_time=elapsed)
+            display_result(result, trainer.stats, response_time=elapsed)
             print()
     finally:
         _teardown_top_bar()
