@@ -17,10 +17,19 @@ term.focus();
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const ws = new WebSocket(`${proto}//${location.host}/ws`);
 
+function sendSize() {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send('\x01' + term.cols + ',' + term.rows);
+  }
+}
+
 ws.addEventListener('open', () => {
-  const attachAddon = new AttachAddon.AttachAddon(ws);
-  term.loadAddon(attachAddon);
+  // Send terminal input to server
+  term.onData((data) => { ws.send(data); });
+  // Render server output in terminal
+  ws.addEventListener('message', (ev) => { term.write(ev.data); });
   resizeToViewport();
+  sendSize();
   term.focus();
 });
 
@@ -42,6 +51,7 @@ function resizeToViewport() {
     el.style.left   = vv.offsetLeft + 'px';
   }
   fitAddon.fit();
+  sendSize();
 }
 
 if (window.visualViewport) {

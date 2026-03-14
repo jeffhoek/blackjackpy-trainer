@@ -109,6 +109,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 except asyncio.TimeoutError:
                     logger.info("Idle timeout — closing session")
                     break
+                # Resize messages: SOH followed by "cols,rows"
+                if data.startswith("\x01"):
+                    try:
+                        cols, rows = data[1:].split(",")
+                        session.set_size(int(cols), int(rows))
+                    except (ValueError, AttributeError):
+                        pass
+                    continue
                 if len(data) > _MAX_MESSAGE_BYTES:
                     logger.warning("Oversized message (%d bytes) — closing", len(data))
                     await websocket.close(code=1009)
