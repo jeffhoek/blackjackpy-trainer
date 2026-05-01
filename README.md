@@ -1,5 +1,7 @@
 # Blackjack Basic Strategy Trainer
 
+[![Deploy to EKS](https://github.com/jeffhoek/blackjackpy-trainer/actions/workflows/deploy.yml/badge.svg)](https://github.com/jeffhoek/blackjackpy-trainer/actions/workflows/deploy.yml)
+
 A console application to help you master blackjack basic strategy through practice. You're dealt hands against a dealer up card and must choose the correct action - the trainer gives immediate feedback on your decisions.
 
 ## Quickstart
