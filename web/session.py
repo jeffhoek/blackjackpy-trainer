@@ -200,11 +200,11 @@ class WebSession:
                     ch = await self.recv_char()
                     upper = ch.upper()
                     if upper == "Q":
-                        await self.send(upper + "\r\n")
+                        await self.send(f"{upper} (Quit)\r\n")
                         action = None
                         break
                     if upper in Action.ALL:
-                        await self.send(upper + "\r\n")
+                        await self.send(f"{upper} ({Action.get_name(upper)})\r\n")
                         action = upper
                         break
                     # Ignore unrecognised keys silently
