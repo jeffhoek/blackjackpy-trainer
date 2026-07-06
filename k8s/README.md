@@ -1,6 +1,6 @@
 # blackjackpy-trainer — EKS Deployment Runbook
 
-Deploys the blackjackpy-trainer FastAPI + WebSocket app to the `eks-proto` cluster in `us-east-2`
+Deploys the blackjackpy-trainer FastAPI + WebSocket app to the `myeks` cluster in `us-east-2`
 using Amazon ECR for images and an AWS Application Load Balancer for ingress.
 
 ---
@@ -20,7 +20,7 @@ GitHub (push to main)
   • Rolling update with new image tag
   • Wait for rollout (120s timeout)
   ↓
-AWS EKS (eks-proto, us-east-2)
+AWS EKS (myeks, us-east-2)
   └─ Namespace: blackjack
      ├─ Deployment: blackjack-trainer (2 replicas)
      ├─ Service: ClusterIP (port 80 → 8080)
@@ -41,10 +41,15 @@ with 24-hour stickiness so reconnects after brief drops land on the same pod.
 
 | File | Purpose |
 |------|---------|
-| `namespace.yaml` | `blackjack` namespace |
+| `bootstrap/namespace.yaml` | `blackjack` namespace — one-time manual bootstrap (see Step 8); CI never applies it |
 | `deployment.yaml` | 2-replica Deployment |
 | `service.yaml` | ClusterIP, port 80 → 8080 |
 | `ingress.yaml` | ALB ingress, sticky sessions, 600s idle timeout |
+
+> **Note:** `kubectl apply -f k8s/` is non-recursive, so it applies the three workload
+> manifests above and intentionally skips `bootstrap/`. The CI deploy role has
+> namespace-scoped admin on `blackjack` only and cannot manage the cluster-scoped
+> Namespace object — that's why the namespace lives in `bootstrap/` and is applied by hand.
 
 CI/CD workflow: `../.github/workflows/deploy.yml` (triggers on push to `main`, also manually dispatchable)
 
@@ -56,12 +61,14 @@ CI/CD workflow: `../.github/workflows/deploy.yml` (triggers on push to `main`, a
 |------|---------|---------|
 | `aws` CLI v2 | ECR login, EKS kubeconfig, IAM setup | https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html |
 | `kubectl` | Apply manifests, check pod and ingress status | `brew install kubectl` |
-| `eksctl` | Grant the deploy IAM role kubectl access | `brew install eksctl` |
 | `docker` or `podman` | Local image build and test | `brew install podman` |
+
+> Access is granted via EKS access entries (`aws eks create-access-entry`), so `eksctl` and
+> `aws-auth` ConfigMap edits are no longer required.
 
 AWS requirements:
 - AWS CLI configured with a principal that has IAM and ECR admin access for the setup steps
-- EKS cluster `eks-proto` is **ACTIVE** in `us-east-2` (required for Phase 2 only)
+- EKS cluster `myeks` is **ACTIVE** in `us-east-2` (required for Phase 2 only)
 - AWS Load Balancer Controller is provisioned by the cluster Terraform — no manual Helm install needed
 
 ---
@@ -280,7 +287,7 @@ aws ecr describe-images \
 
 ## Phase 2 — After the cluster is provisioned
 
-Everything below requires `eks-proto` to be running. The AWS Load Balancer Controller is
+Everything below requires `myeks` to be running. The AWS Load Balancer Controller is
 provisioned automatically by the cluster Terraform — no manual Helm installation needed.
 
 ### Step 7 — Connect kubectl to the cluster
@@ -288,46 +295,61 @@ provisioned automatically by the cluster Terraform — no manual Helm installati
 - Fetch credentials and write them to your local kubeconfig
 
 ```bash
-aws eks update-kubeconfig --name eks-proto --region us-east-2
+aws eks update-kubeconfig --name myeks --region us-east-2
 kubectl get nodes
 ```
 
 ---
 
-### Step 8 — Grant the deploy role kubectl access
+### Step 8 — Bootstrap the namespace and grant the deploy role kubectl access
 
 **Why this step?** AWS IAM controls who can call the EKS API (Step 4), but Kubernetes RBAC
-controls what an authenticated identity can do *inside* the cluster. This step maps the IAM
-deploy role to a Kubernetes user in the `system:masters` group, giving the GitHub Actions runner
-full cluster-admin access via `kubectl`.
+controls what an authenticated identity can do *inside* the cluster. The `myeks` cluster uses
+**EKS access entries** (the modern replacement for the `aws-auth` ConfigMap), so we grant the
+deploy role access by creating an access entry and associating an access policy.
 
-- Map the IAM role to a Kubernetes user with `system:masters` via `eksctl`
+We scope the role to **namespace-admin on `blackjack` only** — least privilege for CI/CD.
+Because a namespace-scoped role cannot manage the cluster-scoped `Namespace` object, the
+namespace is a one-time manual bootstrap done by a cluster admin (you), not by CI.
+
+- Create the `blackjack` namespace once, by hand
+
+```bash
+kubectl apply -f k8s/bootstrap/namespace.yaml
+```
+
+- Create an access entry for the deploy role
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-eksctl create iamidentitymapping \
-  --cluster eks-proto \
-  --region us-east-2 \
-  --arn arn:aws:iam::${ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy \
-  --username github-deploy \
-  --group system:masters
+aws eks create-access-entry \
+  --cluster-name myeks --region us-east-2 \
+  --principal-arn arn:aws:iam::${ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy \
+  --type STANDARD
 ```
 
-> **Note:** `system:masters` is the simplest way to grant full cluster access for CI/CD.
-> For tighter security, create a custom `ClusterRole` scoped to the `blackjack` namespace.
-
-Without `eksctl`, edit the `aws-auth` ConfigMap directly — malformed YAML will break cluster
-authentication for all users:
+- Associate namespace-scoped admin on `blackjack`
 
 ```bash
-kubectl edit configmap aws-auth -n kube-system
-# Add under mapRoles:
-#   - rolearn: arn:aws:iam::<ACCOUNT_ID>:role/blackjackpy-trainer-github-deploy
-#     username: github-deploy
-#     groups:
-#       - system:masters
+aws eks associate-access-policy \
+  --cluster-name myeks --region us-east-2 \
+  --principal-arn arn:aws:iam::${ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy \
+  --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy \
+  --access-scope type=namespace,namespaces=blackjack
 ```
+
+- Verify the association
+
+```bash
+aws eks list-associated-access-policies \
+  --cluster-name myeks --region us-east-2 \
+  --principal-arn arn:aws:iam::${ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy
+```
+
+> **Note:** To grant full cluster access instead (simpler, less safe), associate
+> `AmazonEKSClusterAdminPolicy` with `--access-scope type=cluster` — but then CI could also
+> re-apply the namespace, so you'd move `namespace.yaml` back out of `bootstrap/`.
 
 ---
 
@@ -432,18 +454,21 @@ values don't match.
 ### GH Actions `kubectl` unauthorized
 
 The deploy role assumed successfully but Kubernetes doesn't recognize it.
-This means the `iamidentitymapping` from Step 8 is missing or was applied to the wrong cluster.
+This means the access entry / policy association from Step 8 is missing or was applied to
+the wrong cluster. Confirm it exists, then re-run Step 8 if needed.
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-eksctl create iamidentitymapping \
-  --cluster eks-proto \
-  --region us-east-2 \
-  --arn arn:aws:iam::${ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy \
-  --username github-deploy \
-  --group system:masters
+# Should list the AmazonEKSAdminPolicy scoped to the blackjack namespace
+aws eks list-associated-access-policies \
+  --cluster-name myeks --region us-east-2 \
+  --principal-arn arn:aws:iam::${ACCOUNT_ID}:role/blackjackpy-trainer-github-deploy
 ```
+
+A `namespaces "blackjack" is forbidden` error on the `kubectl apply -f k8s/` step usually means
+CI is trying to apply the cluster-scoped `Namespace` object — make sure `namespace.yaml` lives in
+`k8s/bootstrap/` (not applied by CI) and was bootstrapped by hand in Step 8.
 
 ---
 
@@ -461,7 +486,7 @@ kubectl logs -n kube-system \
   --tail=30
 
 # Verify Pod Identity association for the controller
-aws eks list-pod-identity-associations --cluster-name eks-proto --region us-east-2
+aws eks list-pod-identity-associations --cluster-name myeks --region us-east-2
 ```
 
 ---

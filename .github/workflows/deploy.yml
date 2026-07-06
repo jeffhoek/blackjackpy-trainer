@@ -12,7 +12,7 @@ permissions:
 env:
   AWS_REGION: us-east-2
   ECR_REPOSITORY: blackjackpy-trainer
-  EKS_CLUSTER: eks-proto
+  EKS_CLUSTER: myeks
   K8S_NAMESPACE: blackjack
   DEPLOYMENT_NAME: blackjack-trainer
 
@@ -78,9 +78,11 @@ jobs:
 
       - name: Apply k8s manifests
         if: steps.cluster-check.outputs.exists == 'true'
-        run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/
+        # The namespace is a one-time bootstrap (k8s/bootstrap/namespace.yaml),
+        # applied manually. The CI role has namespace-scoped admin on 'blackjack'
+        # only, so it cannot manage the cluster-scoped Namespace object. Applying
+        # k8s/ is non-recursive, so k8s/bootstrap/ is intentionally skipped.
+        run: kubectl apply -f k8s/
 
       - name: Rolling update with new image
         if: steps.cluster-check.outputs.exists == 'true'
