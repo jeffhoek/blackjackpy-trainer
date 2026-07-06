@@ -130,10 +130,10 @@ def get_action() -> str | None:
     while True:
         action = getch().upper()
         if action == "Q":
-            print(action)
+            print(f"{action} (Quit)")
             return None
         if action in Action.ALL:
-            print(action)
+            print(f"{action} ({Action.get_name(action)})")
             return action
         # Ignore invalid keys silently
 
