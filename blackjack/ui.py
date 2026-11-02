@@ -8,7 +8,7 @@ from pathlib import Path
 from .levels import LEVEL_NAMES
 from .rules import Rules
 from .strategy import Action
-from .trainer import Trainer
+from .trainer import Trainer, format_true_count
 
 # Number of lines reserved for the fixed top bar
 _TOP_BAR_LINES = 2
@@ -73,8 +73,38 @@ def get_rules() -> Rules:
     """Prompt user to configure game rules."""
     print("\n=== Game Configuration ===\n")
 
-    # Number of decks
+    # Training mode
+    print("Modes:")
+    print("  b - Basic strategy")
+    print("  o - Omega II count (plays change at true count -6 and +6)")
     while True:
+        mode_input = input("Mode (b/o) [b]: ").strip().lower()
+        if mode_input in ("", "b"):
+            omega2 = False
+            break
+        if mode_input == "o":
+            omega2 = True
+            break
+        print("Please enter b or o")
+
+    deviations_only = False
+    if omega2:
+        # The book's Omega II tables are single-deck
+        num_decks = 1
+        print("Omega II tables are single deck.")
+        while True:
+            drill_input = input(
+                "Hands: (m)ix of counts or (d)eviations only [m]: "
+            ).strip().lower()
+            if drill_input in ("", "m"):
+                break
+            if drill_input == "d":
+                deviations_only = True
+                break
+            print("Please enter m or d")
+
+    # Number of decks
+    while not omega2:
         deck_input = input("Number of decks (1/6) [1]: ").strip()
         if deck_input == "":
             num_decks = 1
@@ -112,12 +142,21 @@ def get_rules() -> Rules:
             break
         print("Please enter 0-7")
 
-    return Rules(num_decks=num_decks, dealer_hits_soft_17=dealer_hits_soft_17, level=level)
+    return Rules(
+        num_decks=num_decks,
+        dealer_hits_soft_17=dealer_hits_soft_17,
+        level=level,
+        omega2=omega2,
+        deviations_only=deviations_only,
+    )
 
 
-def display_hand(player_hand, dealer_card) -> None:
+def display_hand(player_hand, dealer_card, true_count: int | None = None) -> None:
     """Display the current hand situation."""
-    print(f"\nYour hand: {player_hand}  Dealer shows: {dealer_card}")
+    tc_str = ""
+    if true_count is not None:
+        tc_str = f"  \033[1mTC: {format_true_count(true_count)}\033[0m"
+    print(f"\nYour hand: {player_hand}  Dealer shows: {dealer_card}{tc_str}")
 
 
 def get_action() -> str | None:
@@ -189,7 +228,7 @@ def run_training_loop(trainer: Trainer) -> None:
         while True:
             # Deal a new hand
             player_hand, dealer_card = trainer.deal_hand()
-            display_hand(player_hand, dealer_card)
+            display_hand(player_hand, dealer_card, trainer.current_true_count)
 
             # Get player's action (timed)
             start = time.monotonic()
@@ -217,6 +256,10 @@ def show_strategy_table(rules: "Rules", data_dir: Path) -> None:
     if choice not in ("", "y", "yes"):
         return
 
+    if rules.omega2:
+        _show_count_tables(rules, data_dir)
+        return
+
     table_name = rules.strategy_file.replace(".csv", "").replace("-", " ").title()
     level_name = LEVEL_NAMES.get(rules.level, f"Level {rules.level}")
     title = f"{table_name} Basic Strategy \u2014 Level {rules.level}: {level_name}"
@@ -229,6 +272,29 @@ def show_strategy_table(rules: "Rules", data_dir: Path) -> None:
 
     print("\nPress any key to begin training...")
     getch()
+
+
+def _show_count_tables(rules: "Rules", data_dir: Path) -> None:
+    """Show the Omega II basic, -6 and +6 charts one at a time.
+
+    Cells that differ from basic are highlighted in the -6 and +6 charts.
+    """
+    from .levels import get_keys_for_level
+    from .strategy import Band, CountStrategy
+
+    count_strategy = CountStrategy(data_dir)
+    row_keys = get_keys_for_level(rules.level)
+    level_name = LEVEL_NAMES.get(rules.level, f"Level {rules.level}")
+
+    for band in (Band.BASIC, Band.MINUS6, Band.PLUS6):
+        clear_screen()
+        title = f"Omega II {Band.NAMES[band]} — Level {rules.level}: {level_name}"
+        highlight = count_strategy.deviations(band) or None
+        count_strategy.tables[band].print_table(title, row_keys=row_keys, highlight=highlight)
+        if highlight:
+            print("\nHighlighted cells differ from basic strategy.")
+        print("\nPress any key to continue...")
+        getch()
 
 
 def main(data_dir: Path | None = None, metrics=None) -> None:
