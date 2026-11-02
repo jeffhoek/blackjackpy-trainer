@@ -217,8 +217,21 @@ class Strategy:
         is_correct = player_action.upper() == correct
         return is_correct, correct, exception
 
-    def format_table(self, title: str, row_keys: set[str] | None = None) -> list[str]:
-        """Return the strategy table as a list of formatted lines (with ANSI color)."""
+    def row_keys(self) -> list[str]:
+        """Return the table's row keys in file order."""
+        return list(self._table)
+
+    def format_table(
+        self,
+        title: str,
+        row_keys: set[str] | None = None,
+        highlight: set[tuple[str, str]] | None = None,
+    ) -> list[str]:
+        """Return the strategy table as a list of formatted lines (with ANSI color).
+
+        Cells in ``highlight`` (``(row_key, dealer_card)`` pairs) are drawn
+        in reverse video so deviations stand out.
+        """
         dealer_cols = self.DEALER_CARDS
         lines = [f"\n{title}\n", "      " + "".join(f"{c:>5}" for c in dealer_cols)]
         for key in self._table:
@@ -227,6 +240,10 @@ class Strategy:
             cells = []
             for dc in dealer_cols:
                 action = self._table[key].get(dc, "?")
+                if highlight is not None and (key, dc) in highlight:
+                    color = _ACTION_COLORS.get(action, "")
+                    cells.append(f"   {color}\033[7m{action:>2}{_COLOR_RESET}")
+                    continue
                 color = _ACTION_COLORS.get(action, "")
                 if color:
                     cells.append(f"{color}{action:>5}{_COLOR_RESET}")
@@ -235,7 +252,94 @@ class Strategy:
             lines.append(f"  {key:>4}{''.join(cells)}")
         return lines
 
-    def print_table(self, title: str, row_keys: set[str] | None = None) -> None:
+    def print_table(
+        self,
+        title: str,
+        row_keys: set[str] | None = None,
+        highlight: set[tuple[str, str]] | None = None,
+    ) -> None:
         """Print the strategy table as a formatted ASCII table with color coding."""
-        for line in self.format_table(title, row_keys=row_keys):
+        for line in self.format_table(title, row_keys=row_keys, highlight=highlight):
             print(line)
+
+
+class Band:
+    """True count bands that select an Omega II strategy table."""
+
+    MINUS6 = "minus6"
+    BASIC = "basic"
+    PLUS6 = "plus6"
+
+    ALL = (MINUS6, BASIC, PLUS6)
+
+    NAMES = {
+        MINUS6: "-6 Strategy (TC <= -6)",
+        BASIC: "Basic Strategy (-6 < TC < +6)",
+        PLUS6: "+6 Strategy (TC >= +6)",
+    }
+
+    @staticmethod
+    def for_true_count(true_count: int) -> str:
+        """Return the band whose table applies at this true count."""
+        if true_count <= -6:
+            return Band.MINUS6
+        if true_count >= 6:
+            return Band.PLUS6
+        return Band.BASIC
+
+
+class CountStrategy:
+    """Omega II play strategy: one table per true count band.
+
+    Uses the -6 table when TC <= -6, the +6 table when TC >= +6, and the
+    book's basic strategy in between.
+    """
+
+    FILES = {
+        Band.MINUS6: "single-deck-tc-minus6.csv",
+        Band.BASIC: "single-deck-omega2-basic.csv",
+        Band.PLUS6: "single-deck-tc-plus6.csv",
+    }
+
+    def __init__(self, data_dir: Path) -> None:
+        self.tables = {band: Strategy(data_dir / name) for band, name in self.FILES.items()}
+        self._deviations = {
+            band: self._diff(self.tables[band], self.tables[Band.BASIC])
+            for band in (Band.MINUS6, Band.PLUS6)
+        }
+
+    @staticmethod
+    def _diff(table: Strategy, basic: Strategy) -> set[tuple[str, str]]:
+        """Return the (row_key, dealer_card) cells where table differs from basic."""
+        cells = set()
+        for key in basic.row_keys():
+            for dc in Strategy.DEALER_CARDS:
+                if table.get_correct_action(key, dc) != basic.get_correct_action(key, dc):
+                    cells.add((key, dc))
+        return cells
+
+    def deviations(self, band: str) -> set[tuple[str, str]]:
+        """Return the cells where a band's table differs from basic (empty for basic)."""
+        return self._deviations.get(band, set())
+
+    def table_for(self, true_count: int) -> Strategy:
+        """Return the strategy table that applies at this true count."""
+        return self.tables[Band.for_true_count(true_count)]
+
+    def check_action(
+        self,
+        player_action: str,
+        row_key: str,
+        dealer_card: str,
+        true_count: int,
+        hand: Hand | None = None,
+        rules: Rules | None = None,
+    ) -> tuple[bool, str, StrategyException | None]:
+        """Check a player's action against the table for this true count."""
+        return self.table_for(true_count).check_action(
+            player_action, row_key, dealer_card, hand=hand, rules=rules
+        )
+
+    def basic_action(self, row_key: str, dealer_card: str) -> str:
+        """Return the basic strategy action, ignoring the count."""
+        return self.tables[Band.BASIC].get_correct_action(row_key, dealer_card)
